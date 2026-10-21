@@ -29,7 +29,7 @@ def test_dev_me_uses_dev_identity_and_camel_case(dev_client):
     body = dev_client.get("/api/me").json()
 
     assert body["error"] is None
-    assert body["data"]["role"] == "viewer"
+    assert body["data"]["role"] == "admin"
     assert "displayName" in body["data"]
 
 
@@ -45,6 +45,7 @@ def test_prod_me_with_valid_token_creates_user(prod_client, repository):
 
     assert response.status_code == 200
     assert response.json()["data"]["sub"] == SUB
+    assert response.json()["data"]["role"] == "editor"
     assert repository.get_user(SUB) is not None
 
 

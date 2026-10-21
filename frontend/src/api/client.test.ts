@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, apiGet } from './client';
+import { ApiError, apiGet, apiGetPage } from './client';
 
 function mockFetch(body: unknown, status = 200) {
   vi.stubGlobal(
@@ -51,5 +51,19 @@ describe('apiGet', () => {
     mockFetch({ data: null, error: null, meta: null });
 
     await expect(apiGet('/api/me')).rejects.toMatchObject({ code: 'bad_response' });
+  });
+});
+
+describe('apiGetPage', () => {
+  it('returns items with total from meta', async () => {
+    mockFetch({ data: [{ id: 1 }], error: null, meta: { total: 7, page: 1, limit: 50 } });
+
+    await expect(apiGetPage('/api/templates')).resolves.toEqual({ items: [{ id: 1 }], total: 7 });
+  });
+
+  it('defaults total to 0 when meta is missing', async () => {
+    mockFetch({ data: [], error: null, meta: null });
+
+    await expect(apiGetPage('/api/templates')).resolves.toEqual({ items: [], total: 0 });
   });
 });

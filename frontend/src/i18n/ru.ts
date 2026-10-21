@@ -7,6 +7,15 @@ export const ru = {
     role: 'Роль',
     unnamed: 'Пользователь без имени',
   },
+  common: {
+    loading: 'Загрузка',
+  },
+  templates: {
+    title: 'Шаблоны',
+    emptyTitle: 'Шаблонов пока нет',
+    emptyHint: 'Созданные и общие шаблоны появятся здесь.',
+    scope: { shared: 'Общий', personal: 'Личный' },
+  },
   roles: {
     admin: 'Администратор',
     editor: 'Редактор',

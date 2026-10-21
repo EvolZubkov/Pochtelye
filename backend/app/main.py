@@ -14,6 +14,7 @@ from app.platform import HttpPlatformClient, PlatformClient, PodStatus, StubPlat
 from app.repository import Repository, SqlRepository
 from app.repository.sql import make_engine
 from app.routes import router
+from app.routes_templates import router as templates_router
 
 
 def _build_platform_client(settings: Settings) -> PlatformClient:
@@ -58,6 +59,7 @@ def create_app(
     app.add_middleware(RequestIdMiddleware)
     register_error_handlers(app)
     app.include_router(router)
+    app.include_router(templates_router)
     _mount_static(app, settings.static_dir)
     return app
 

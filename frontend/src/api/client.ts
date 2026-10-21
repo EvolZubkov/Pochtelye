@@ -24,7 +24,12 @@ export class ApiError extends Error {
 const NETWORK_ERROR_CODE = 'network_error';
 const BAD_RESPONSE_CODE = 'bad_response';
 
-export async function apiGet<T>(path: string): Promise<T> {
+export interface Page<T> {
+  items: T[];
+  total: number;
+}
+
+async function request<T>(path: string): Promise<Envelope<T>> {
   let response: Response;
   try {
     response = await fetch(path, { headers: { Accept: 'application/json' } });
@@ -45,5 +50,15 @@ export async function apiGet<T>(path: string): Promise<T> {
   if (!response.ok || body.data === null) {
     throw new ApiError(BAD_RESPONSE_CODE, 'Empty response', response.status);
   }
-  return body.data;
+  return body;
+}
+
+export async function apiGet<T>(path: string): Promise<T> {
+  return (await request<T>(path)).data as T;
+}
+
+export async function apiGetPage<T>(path: string): Promise<Page<T>> {
+  const body = await request<T[]>(path);
+  const total = body.meta?.total;
+  return { items: body.data as T[], total: typeof total === 'number' ? total : 0 };
 }

@@ -26,5 +26,10 @@ def get_identity(
 def get_current_user(
     identity: Identity = Depends(get_identity),
     repository: Repository = Depends(get_repository),
+    settings: Settings = Depends(get_settings),
 ) -> User:
-    return repository.ensure_user(identity.sub, Role.VIEWER)
+    is_admin = settings.is_admin_sub(identity.sub)
+    user = repository.ensure_user(identity.sub, Role.ADMIN if is_admin else settings.default_role)
+    if is_admin and user.role != Role.ADMIN:
+        return repository.set_role(identity.sub, Role.ADMIN) or user
+    return user

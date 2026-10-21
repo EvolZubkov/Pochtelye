@@ -1,9 +1,14 @@
 import { render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { ApiError } from './api/client';
 import * as meApi from './api/me';
+import * as templatesApi from './api/templates';
 import { errorMessage } from './i18n';
+
+beforeEach(() => {
+  vi.spyOn(templatesApi, 'fetchTemplates').mockResolvedValue({ items: [], total: 0 });
+});
 
 afterEach(() => vi.restoreAllMocks());
 

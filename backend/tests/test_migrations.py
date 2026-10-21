@@ -13,4 +13,4 @@ def test_app_migrates_database_on_startup(tmp_path):
         response = client.get("/api/me")
 
     assert response.status_code == 200
-    assert response.json()["data"]["role"] == "viewer"
+    assert response.json()["data"]["role"] == "admin"

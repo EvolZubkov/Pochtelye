@@ -1,24 +1,6 @@
-import { useEffect, useState } from 'react';
 import { fetchMe } from '../api/me';
 import type { Me } from '../api/me';
+import { useAsync } from './useAsync';
+import type { AsyncState } from './useAsync';
 
-export type MeState =
-  | { status: 'loading' }
-  | { status: 'ready'; me: Me }
-  | { status: 'error'; error: unknown };
-
-export function useMe(): MeState {
-  const [state, setState] = useState<MeState>({ status: 'loading' });
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchMe()
-      .then((me) => !cancelled && setState({ status: 'ready', me }))
-      .catch((error: unknown) => !cancelled && setState({ status: 'error', error }));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return state;
-}
+export const useMe = (): AsyncState<Me> => useAsync(fetchMe);
