@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     env: str = "dev"
     database_url: str = "sqlite:///./pochtelye.sqlite3"
     log_level: str = "INFO"
+    # Каталог собранного фронтенда (frontend/dist). Если не задан или не существует, не раздаём.
+    static_dir: str | None = "../frontend/dist"
 
     py_platform_api_base: str | None = None
     py_platform_send_status: str | None = None

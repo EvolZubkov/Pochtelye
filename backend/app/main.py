@@ -1,7 +1,9 @@
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings
 from app.errors import register_error_handlers
@@ -56,4 +58,11 @@ def create_app(
     app.add_middleware(RequestIdMiddleware)
     register_error_handlers(app)
     app.include_router(router)
+    _mount_static(app, settings.static_dir)
     return app
+
+
+def _mount_static(app: FastAPI, static_dir: str | None) -> None:
+    # Монтируем после API-роутов, иначе "/" перехватит /api/*.
+    if static_dir and Path(static_dir).is_dir():
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
