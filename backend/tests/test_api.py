@@ -3,6 +3,7 @@ import time
 import jwt
 
 from app.platform import PodStatus
+from app.repository import NewUser, Role
 
 SUB = "11111111-1111-1111-1111-111111111111"
 
@@ -40,13 +41,22 @@ def test_prod_me_without_token_is_401(prod_client):
     assert response.json()["error"]["code"] == "auth_missing"
 
 
-def test_prod_me_with_valid_token_creates_user(prod_client, repository):
+def test_prod_me_with_valid_token_for_registered_user(prod_client, repository):
+    repository.create_user(NewUser(email="a@rt.ru", role=Role.EDITOR, sub=SUB))
+
     response = prod_client.get("/api/me", headers={"jwt": _token()})
 
     assert response.status_code == 200
     assert response.json()["data"]["sub"] == SUB
     assert response.json()["data"]["role"] == "editor"
-    assert repository.get_user(SUB) is not None
+
+
+def test_prod_me_with_unknown_sub_is_not_activated(prod_client, repository):
+    response = prod_client.get("/api/me", headers={"jwt": _token()})
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "not_activated"
+    assert repository.get_user_by_sub(SUB) is None
 
 
 def test_prod_me_with_expired_token_is_401(prod_client):
@@ -70,3 +80,19 @@ def test_unknown_route_uses_envelope(dev_client):
 
 def test_lifespan_reports_pod_statuses(dev_client, platform):
     assert platform.sent == [PodStatus.CREATING, PodStatus.RUNNING]
+
+
+def test_settings_default_to_prod_so_dev_login_is_opt_in(monkeypatch):
+    from app.config import Settings
+
+    monkeypatch.delenv("ENV", raising=False)
+
+    assert Settings(_env_file=None).env == "prod"
+    assert Settings(_env_file=None).is_dev is False
+
+
+def test_token_with_oversized_sub_is_rejected(prod_client):
+    response = prod_client.get("/api/me", headers={"jwt": _token(sub="x" * 65)})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "auth_invalid"

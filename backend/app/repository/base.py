@@ -1,3 +1,5 @@
+"""Доменные типы и интерфейсы хранилища. SQLite локально, PostgreSQL в проде."""
+
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -10,28 +12,104 @@ class Role(StrEnum):
     VIEWER = "viewer"
 
 
+class UserStatus(StrEnum):
+    INVITED = "invited"  # заведён админом, ещё не вошёл (нет sub)
+    ACTIVE = "active"
+
+
 @dataclass(frozen=True)
 class User:
-    sub: str
-    role: Role
-    display_name: str | None
+    id: str
+    sub: str | None
     email: str | None
+    display_name: str | None
+    role: Role
+    audience_id: str | None
     created_at: datetime
+    last_seen_at: datetime | None
+    invite_expires_at: datetime | None
+
+    @property
+    def status(self) -> UserStatus:
+        return UserStatus.ACTIVE if self.sub else UserStatus.INVITED
+
+
+@dataclass(frozen=True)
+class NewUser:
+    email: str | None
+    role: Role
+    display_name: str | None = None
+    audience_id: str | None = None
+    sub: str | None = None
+
+
+@dataclass(frozen=True)
+class UserPage:
+    items: tuple[User, ...]
+    total: int
 
 
 class UserRepository(Protocol):
-    """Хранилище скрыто за интерфейсом: SQLite локально, PostgreSQL в проде."""
+    def get_user(self, user_id: str) -> User | None: ...
 
-    def get_user(self, sub: str) -> User | None: ...
+    def get_user_by_sub(self, sub: str) -> User | None: ...
 
-    def ensure_user(self, sub: str, default_role: Role = Role.VIEWER) -> User:
-        """Возвращает пользователя, создавая запись при первом входе."""
+    def list_users(self, page: int, limit: int, search: str | None = None) -> UserPage: ...
+
+    def ensure_admin(self, sub: str) -> User:
+        """Идемпотентно заводит администратора из настроек (ADMIN_SUBS, dev-пользователь)."""
         ...
 
-    def set_role(self, sub: str, role: Role) -> User | None: ...
+    def create_user(self, new: NewUser) -> User:
+        """Заводит пользователя; DuplicateEmailError, если почта занята."""
+        ...
 
-    def delete_user(self, sub: str) -> bool:
-        """Мягкое удаление (deleted_at). False, если пользователя нет."""
+    def update_user(self, user_id: str, changes: dict) -> User | None:
+        """changes: email, display_name, role, audience_id. Прочие ключи игнорируются."""
+        ...
+
+    def delete_user(self, user_id: str) -> bool:
+        """Мягкое удаление (deleted_at); освобождает sub и почту."""
+        ...
+
+    def set_invite(self, user_id: str, code_hash: str, expires_at: datetime) -> User | None: ...
+
+    def claim_invite(self, code_hash: str, sub: str, now: datetime) -> User | None:
+        """Привязывает sub к приглашённому пользователю и гасит код. None, если код не подошёл."""
+        ...
+
+    def touch_last_seen(self, user_id: str, now: datetime) -> None: ...
+
+    def count_users_by_audience(self, audience_id: str) -> int: ...
+
+
+@dataclass(frozen=True)
+class Audience:
+    """Аудитория: профиль редактора (какие блоки и функции доступны)."""
+
+    id: str
+    name: str
+    profile: dict
+    is_default: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class AudienceRepository(Protocol):
+    def list_audiences(self) -> tuple[Audience, ...]: ...
+
+    def get_audience(self, audience_id: str) -> Audience | None: ...
+
+    def get_default_audience(self) -> Audience | None: ...
+
+    def create_audience(self, name: str, profile: dict, is_default: bool = False) -> Audience: ...
+
+    def update_audience(self, audience_id: str, changes: dict) -> Audience | None:
+        """changes: name, profile, is_default (True делает аудиторию единственной по умолчанию)."""
+        ...
+
+    def delete_audience(self, audience_id: str) -> bool:
+        """Мягкое удаление (deleted_at)."""
         ...
 
 
@@ -95,5 +173,69 @@ class TemplateRepository(Protocol):
         ...
 
 
-class Repository(UserRepository, TemplateRepository, Protocol):
-    """Полное хранилище приложения: пользователи и шаблоны."""
+class SendStatus(StrEnum):
+    SENT = "sent"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class NewSend:
+    sender_id: str
+    sender_email: str | None
+    subject: str
+    recipients: tuple[str, ...]
+    status: SendStatus
+    error_code: str | None = None
+    template_id: str | None = None
+
+
+@dataclass(frozen=True)
+class SendRecord:
+    id: str
+    sender_id: str
+    sender_email: str | None
+    sent_at: datetime
+    subject: str
+    recipients: tuple[str, ...]
+    status: SendStatus
+    error_code: str | None
+    template_id: str | None
+
+
+@dataclass(frozen=True)
+class SendFilter:
+    sender_id: str | None = None
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+
+
+@dataclass(frozen=True)
+class SendPage:
+    items: tuple[SendRecord, ...]
+    total: int
+
+
+@dataclass(frozen=True)
+class SenderSummary:
+    sender_id: str
+    sender_email: str | None
+    messages: int
+    recipients: int
+    failed: int
+    last_sent_at: datetime
+
+
+class SendLogRepository(Protocol):
+    """Журнал отправок: кто, когда, сколько и кому. Адреса получателей — PII, в логи не пишем."""
+
+    def record_send(self, new: NewSend) -> SendRecord: ...
+
+    def list_sends(self, page: int, limit: int, flt: SendFilter) -> SendPage: ...
+
+    def summarize_senders(self, flt: SendFilter) -> tuple[SenderSummary, ...]: ...
+
+
+class Repository(
+    UserRepository, AudienceRepository, TemplateRepository, SendLogRepository, Protocol
+):
+    """Полное хранилище приложения."""

@@ -6,17 +6,26 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings
-from app.editor_resources import RESOURCE_DIRS
+from app.editor_resources import RESOURCE_DIRS, load_editor_profile
 from app.errors import register_error_handlers
 from app.identity import DevIdentityProvider, IdentityProvider, PlatformJwtProvider
 from app.logging_setup import RequestIdMiddleware, configure_logging
 from app.migrate import upgrade_database
 from app.platform import HttpPlatformClient, PlatformClient, PodStatus, StubPlatformClient
+from app.ratelimit import FailureLimiter
 from app.repository import Repository, SqlRepository
 from app.repository.sql import make_engine
 from app.routes import router
+from app.routes_admin import router as admin_router
 from app.routes_editor import router as editor_router
 from app.routes_templates import router as templates_router
+
+
+def _ensure_default_audience(repository: Repository, settings: Settings) -> None:
+    """При первом запуске создаёт аудиторию по умолчанию из встроенного профиля."""
+    if repository.get_default_audience() is None:
+        profile = load_editor_profile(settings.editor_profile, settings.resources_dir)
+        repository.create_audience("По умолчанию", profile, is_default=True)
 
 
 def _build_platform_client(settings: Settings) -> PlatformClient:
@@ -45,6 +54,7 @@ def create_app(
     if repository is None:
         upgrade_database(settings.database_url)
         repository = SqlRepository(make_engine(settings.database_url))
+    _ensure_default_audience(repository, settings)
     platform_client = platform_client or _build_platform_client(settings)
 
     @asynccontextmanager
@@ -57,11 +67,13 @@ def create_app(
     app = FastAPI(title="Почтелье v3", lifespan=lifespan)
     app.state.settings = settings
     app.state.repository = repository
+    app.state.activation_limiter = FailureLimiter()
     app.state.identity_provider = identity_provider or _build_identity_provider(settings)
     app.add_middleware(RequestIdMiddleware)
     register_error_handlers(app)
     app.include_router(router)
     app.include_router(templates_router)
+    app.include_router(admin_router)
     app.include_router(editor_router)
     _mount_resources(app, settings.resources_dir)
     _mount_static(app, settings.static_dir)

@@ -7,6 +7,7 @@ from fastapi import Request
 from app.errors import AppError
 
 JWT_HEADER = "jwt"
+MAX_SUB_LENGTH = 64  # по размеру колонок users.sub и templates.owner_sub
 
 
 @dataclass(frozen=True)
@@ -42,7 +43,10 @@ class PlatformJwtProvider:
             raise AppError("auth_expired", "Токен платформы истёк", 401) from exc
         except jwt.PyJWTError as exc:
             raise AppError("auth_invalid", "Некорректный токен платформы", 401) from exc
-        return Identity(sub=str(claims["sub"]))
+        sub = str(claims["sub"])
+        if not sub or len(sub) > MAX_SUB_LENGTH:
+            raise AppError("auth_invalid", "Некорректный токен платформы", 401)
+        return Identity(sub=sub)
 
 
 class DevIdentityProvider:

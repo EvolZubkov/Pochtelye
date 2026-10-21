@@ -58,14 +58,16 @@ def _prune(node: Any, root: Path) -> Any:
     return node
 
 
-def load_editor_config(resources_dir: str | None) -> dict[str, Any]:
+def load_editor_config(
+    resources_dir: str | None, features: dict[str, bool] | None = None
+) -> dict[str, Any]:
     config = dict(EMPTY_CONFIG)
     if resources_dir:
         root = Path(resources_dir)
         loaded = _read_json(root / "config.json")
         if loaded is not None:
             config = _prune(loaded, root)
-    return {**config, "features": FEATURES}
+    return {**config, "features": {**FEATURES, **(features or {})}}
 
 
 def load_editor_profile(name: str, resources_dir: str | None) -> dict[str, Any]:

@@ -1,14 +1,13 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.repository.base import Role
-
 
 class Settings(BaseSettings):
     """Настройки из окружения. Переменные PY_PLATFORM_* задаёт платформа skript.rt.ru."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    env: str = "dev"
+    # Режим dev включает вход без JWT и делает dev-пользователя админом: только явно, ENV=dev.
+    env: str = "prod"
     database_url: str = "sqlite:///./pochtelye.sqlite3"
     log_level: str = "INFO"
     # Каталог собранного фронтенда (frontend/dist). Если не задан или не существует, не раздаём.
@@ -25,8 +24,6 @@ class Settings(BaseSettings):
     # Идентичность разработчика, когда платформы нет (только env=dev).
     dev_user_sub: str = "00000000-0000-0000-0000-000000000001"
 
-    # Роль нового пользователя; viewer включает режим «только чтение» по умолчанию.
-    default_role: Role = Role.EDITOR
     # sub администраторов. В env задаётся JSON-списком: ADMIN_SUBS='["uuid1","uuid2"]'.
     admin_subs: list[str] = []
 

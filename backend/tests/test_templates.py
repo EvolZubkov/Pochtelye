@@ -140,10 +140,16 @@ def test_create_validates_input(multi_client, body):
     assert response.json()["error"]["code"] == "validation_error"
 
 
-def test_admin_sub_is_promoted_if_already_registered(multi_client, repository):
-    from app.repository import Role
+def test_bootstrap_admin_is_created_on_first_request(multi_client, repository):
+    me = multi_client.get("/api/me", headers=_as(ADMIN_SUB)).json()
 
-    repository.ensure_user(ADMIN_SUB, Role.VIEWER)
+    assert me["data"]["role"] == "admin"
+    assert repository.get_user_by_sub(ADMIN_SUB) is not None
+
+
+def test_bootstrap_admin_is_repromoted_if_demoted(multi_client, repository):
+    admin = repository.ensure_admin(ADMIN_SUB)
+    repository.update_user(admin.id, {"role": "viewer"})
 
     me = multi_client.get("/api/me", headers=_as(ADMIN_SUB)).json()
 
@@ -156,3 +162,19 @@ def test_update_and_delete_unknown_template_is_404(multi_client):
 
     assert patch.status_code == 404
     assert delete.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "preview",
+    ["javascript:alert(1)", "https://evil.example/x.png", "data:text/html;base64,AAAA", "<svg/>"],
+)
+def test_preview_must_be_an_image_data_url(multi_client, preview):
+    response = _create(multi_client, EDITOR_SUB, preview=preview)
+
+    assert response.status_code == 422
+
+
+def test_image_data_url_preview_is_accepted(multi_client):
+    response = _create(multi_client, EDITOR_SUB, preview="data:image/png;base64,iVBORw0KGgo=")
+
+    assert response.status_code == 201

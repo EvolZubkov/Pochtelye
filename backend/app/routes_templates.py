@@ -1,7 +1,8 @@
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app import permissions
 from app.deps import get_current_user, get_repository
@@ -18,9 +19,17 @@ from app.repository import (
 router = APIRouter(prefix="/api/templates")
 
 MAX_BLOCKS = 1000
+PREVIEW_PATTERN = re.compile(r"^data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$")
 MAX_PREVIEW_CHARS = 700_000
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
+
+
+def _image_data_url(value: str | None) -> str | None:
+    """Миниатюра — только картинка-data URL: никаких внешних адресов и разметки."""
+    if value is not None and not PREVIEW_PATTERN.match(value):
+        raise ValueError("превью должно быть data:image (png, jpeg, webp)")
+    return value
 
 
 class TemplateSummaryDto(CamelModel):
@@ -45,12 +54,16 @@ class TemplateCreate(CamelModel):
     blocks: list[dict] = Field(default_factory=list, max_length=MAX_BLOCKS)
     preview: str | None = Field(default=None, max_length=MAX_PREVIEW_CHARS)
 
+    _preview = field_validator("preview")(_image_data_url)
+
 
 class TemplateUpdate(CamelModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     category: str | None = Field(default=None, max_length=100)
     blocks: list[dict] | None = Field(default=None, max_length=MAX_BLOCKS)
     preview: str | None = Field(default=None, max_length=MAX_PREVIEW_CHARS)
+
+    _preview = field_validator("preview")(_image_data_url)
 
 
 def _summary_dto(t: TemplateSummary) -> dict:
