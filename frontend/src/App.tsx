@@ -9,34 +9,45 @@ import {
   Spinner,
   Tabs,
 } from '@universityrt/ui-kit';
+import { ApiError } from './api/client';
 import type { Me } from './api/me';
+import { ActivationForm } from './components/ActivationForm';
+import { AdminPanel } from './components/admin/AdminPanel';
 import { EditorFrame } from './components/EditorFrame';
 import { TemplatesList } from './components/TemplatesList';
+import { useReload } from './hooks/useAsync';
 import { useHashRoute } from './hooks/useHashRoute';
 import type { Route } from './hooks/useHashRoute';
 import { useMe } from './hooks/useMe';
 import { errorMessage, t } from './i18n';
 
-const BASE_NAV: { id: Route; label: string }[] = [
-  { id: 'home', label: t.nav.home },
-  { id: 'editor', label: t.nav.editor },
-];
-const BUILDER_NAV = { id: 'builder' as Route, label: t.nav.builder };
+const NOT_ACTIVATED = 'not_activated';
+const ADMIN_ROUTES: readonly Route[] = ['builder', 'admin'];
 
-/** Конструктор доступен администратору; прочие роли получают только «Письма». */
-function navFor(role: Me['role']) {
-  return role === 'admin' ? [...BASE_NAV, BUILDER_NAV] : BASE_NAV;
+const NAV_LABELS: Record<Route, string> = {
+  home: t.nav.home,
+  editor: t.nav.editor,
+  builder: t.nav.builder,
+  admin: t.nav.admin,
+};
+
+/** Конструктор и админ-панель видны администратору; право на них проверяет API. */
+function navFor(role: Me['role']): { id: Route; label: string }[] {
+  const routes: Route[] = role === 'admin' ? ['home', 'editor', 'builder', 'admin'] : ['home', 'editor'];
+  return routes.map((id) => ({ id, label: NAV_LABELS[id] }));
 }
 
 function visibleRoute(route: Route, role: Me['role']): Route {
-  return route === 'builder' && role !== 'admin' ? 'home' : route;
+  return ADMIN_ROUTES.includes(route) && role !== 'admin' ? 'home' : route;
 }
 
 export function App() {
-  const state = useMe();
+  const [version, reload] = useReload();
+  const state = useMe(version);
   const [route, navigate] = useHashRoute();
   const user = state.status === 'ready' ? state.data : null;
-  const activeRoute = user ? visibleRoute(route, user.role) : route;
+  const needsActivation =
+    state.status === 'error' && state.error instanceof ApiError && state.error.code === NOT_ACTIVATED;
 
   return (
     <AppShell
@@ -44,26 +55,41 @@ export function App() {
         <>
           <AppShellBrand>{t.appName}</AppShellBrand>
           {user && (
-            <AppShellUser name={user.displayName ?? t.home.unnamed} role={t.roles[user.role]} />
+            <AppShellUser name={user.displayName ?? user.email ?? t.home.unnamed} role={t.roles[user.role]} />
           )}
         </>
       }
     >
       {state.status === 'loading' && <Spinner aria-label={t.common.loading} />}
-      {state.status === 'error' && <Banner tone="error" title={errorMessage(state.error)} />}
-      {user && (
-        <>
-          <Tabs
-            items={navFor(user.role)}
-            value={activeRoute}
-            onChange={navigate}
-            hidePanel
-            listAriaLabel={t.nav.label}
-          />
-          {activeRoute === 'home' ? <Home user={user} /> : <EditorFrame mode={activeRoute} />}
-        </>
+      {needsActivation && <ActivationForm onActivated={reload} />}
+      {state.status === 'error' && !needsActivation && (
+        <Banner tone="error" title={errorMessage(state.error)} />
       )}
+      {user && <Workspace user={user} route={visibleRoute(route, user.role)} onNavigate={navigate} />}
     </AppShell>
+  );
+}
+
+interface WorkspaceProps {
+  user: Me;
+  route: Route;
+  onNavigate: (route: Route) => void;
+}
+
+function Workspace({ user, route, onNavigate }: WorkspaceProps) {
+  return (
+    <>
+      <Tabs
+        items={navFor(user.role)}
+        value={route}
+        onChange={onNavigate}
+        hidePanel
+        listAriaLabel={t.nav.label}
+      />
+      {route === 'home' && <Home user={user} />}
+      {(route === 'editor' || route === 'builder') && <EditorFrame mode={route} />}
+      {route === 'admin' && <AdminPanel />}
+    </>
   );
 }
 
@@ -74,7 +100,7 @@ function Home({ user }: { user: Me }) {
       <Card>
         <CardBody>
           <p>
-            {t.home.greeting}: {user.displayName ?? user.sub}
+            {t.home.greeting}: {user.displayName ?? user.email ?? user.sub}
           </p>
           <p>
             {t.home.role}: {t.roles[user.role]}

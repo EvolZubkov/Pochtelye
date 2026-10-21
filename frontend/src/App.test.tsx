@@ -1,10 +1,22 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { ApiError } from './api/client';
 import * as meApi from './api/me';
+import * as adminApi from './api/admin';
 import * as templatesApi from './api/templates';
 import { errorMessage } from './i18n';
+
+const me = (over: Partial<meApi.Me> = {}): meApi.Me => ({
+  id: 'id-1',
+  sub: 'u1',
+  role: 'editor',
+  displayName: null,
+  email: null,
+  audienceId: null,
+  ...over,
+});
 
 beforeEach(() => {
   vi.spyOn(templatesApi, 'fetchTemplates').mockResolvedValue({ items: [], total: 0 });
@@ -17,12 +29,7 @@ afterEach(() => {
 
 describe('App', () => {
   it('shows the user and the localized role once loaded', async () => {
-    vi.spyOn(meApi, 'fetchMe').mockResolvedValue({
-      sub: 'u1',
-      role: 'admin',
-      displayName: 'Анна',
-      email: null,
-    });
+    vi.spyOn(meApi, 'fetchMe').mockResolvedValue(me({ role: 'admin', displayName: 'Анна' }));
 
     render(<App />);
 
@@ -41,12 +48,7 @@ describe('App', () => {
 
 describe('App navigation', () => {
   it('shows the editor iframe on the editor route', async () => {
-    vi.spyOn(meApi, 'fetchMe').mockResolvedValue({
-      sub: 'u1',
-      role: 'editor',
-      displayName: null,
-      email: null,
-    });
+    vi.spyOn(meApi, 'fetchMe').mockResolvedValue(me());
     window.location.hash = '#/editor';
 
     render(<App />);
@@ -59,7 +61,7 @@ describe('App navigation', () => {
 
 describe('App builder access', () => {
   const as = (role: 'admin' | 'editor') =>
-    vi.spyOn(meApi, 'fetchMe').mockResolvedValue({ sub: 'u1', role, displayName: null, email: null });
+    vi.spyOn(meApi, 'fetchMe').mockResolvedValue(me({ role }));
 
   it('offers the builder tab and iframe to admins', async () => {
     as('admin');
@@ -83,6 +85,66 @@ describe('App builder access', () => {
     expect(await screen.findByText(/Вы вошли как/)).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Конструктор' })).not.toBeInTheDocument();
     expect(screen.queryByTitle('Конструктор шаблонов')).not.toBeInTheDocument();
+  });
+});
+
+describe('App activation', () => {
+  it('shows the activation form when access is not activated and reloads after success', async () => {
+    const fetchMe = vi
+      .spyOn(meApi, 'fetchMe')
+      .mockRejectedValueOnce(new ApiError('not_activated', 'x', 403))
+      .mockResolvedValue(me({ displayName: 'Новичок' }));
+    vi.spyOn(meApi, 'activate').mockResolvedValue(me());
+
+    render(<App />);
+    await userEvent.type(await screen.findByLabelText('Код приглашения'), 'ABCD-EFGH');
+    await userEvent.click(screen.getByRole('button', { name: 'Активировать' }));
+
+    expect(await screen.findByText(/Вы вошли как: Новичок/)).toBeInTheDocument();
+    expect(fetchMe).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows other errors as a banner, not the activation form', async () => {
+    vi.spyOn(meApi, 'fetchMe').mockRejectedValue(new ApiError('auth_missing', 'x', 401));
+
+    render(<App />);
+
+    expect(await screen.findByText(/Нет токена платформы/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Код приглашения')).not.toBeInTheDocument();
+  });
+});
+
+describe('App admin panel', () => {
+  beforeEach(() => {
+    vi.spyOn(adminApi, 'fetchUsers').mockResolvedValue({ items: [], total: 0 });
+    vi.spyOn(adminApi, 'fetchAudiences').mockResolvedValue([]);
+    vi.spyOn(adminApi, 'fetchSendSummary').mockResolvedValue([]);
+    vi.spyOn(adminApi, 'fetchSendLog').mockResolvedValue({ items: [], total: 0 });
+  });
+
+  it('shows the admin tab to admins and switches between sections', async () => {
+    vi.spyOn(meApi, 'fetchMe').mockResolvedValue(me({ role: 'admin' }));
+    window.location.hash = '#/admin';
+
+    render(<App />);
+
+    expect(await screen.findByText('Пользователей не найдено')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Журнал отправок' }));
+    expect(await screen.findByText('Нет отправок за выбранный период')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Аудитории' }));
+    await waitFor(() => expect(adminApi.fetchAudiences).toHaveBeenCalled());
+    expect(await screen.findByText('Аудиторий нет')).toBeInTheDocument();
+  });
+
+  it('hides the admin tab and panel from non-admins', async () => {
+    vi.spyOn(meApi, 'fetchMe').mockResolvedValue(me({ role: 'editor' }));
+    window.location.hash = '#/admin';
+
+    render(<App />);
+
+    expect(await screen.findByText(/Вы вошли как/)).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Админ' })).not.toBeInTheDocument();
+    expect(adminApi.fetchUsers).not.toHaveBeenCalled();
   });
 });
 

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 
-export type Route = 'home' | 'editor' | 'builder';
+export type Route = 'home' | 'editor' | 'builder' | 'admin';
 
 const ROUTE_PREFIX = '#/';
 const DEFAULT_ROUTE: Route = 'home';
-const ROUTES: readonly Route[] = ['home', 'editor', 'builder'];
+const ROUTES: readonly Route[] = ['home', 'editor', 'builder', 'admin'];
 
 export function parseRoute(hash: string): Route {
   const name = hash.startsWith(ROUTE_PREFIX) ? hash.slice(ROUTE_PREFIX.length) : '';
