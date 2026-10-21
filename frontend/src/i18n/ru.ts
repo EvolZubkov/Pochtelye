@@ -7,6 +7,8 @@ export const ru = {
     role: 'Роль',
     unnamed: 'Пользователь без имени',
   },
+  nav: { label: 'Разделы', home: 'Главная', editor: 'Письма', builder: 'Конструктор' },
+  editor: { title: 'Редактор писем', builderTitle: 'Конструктор шаблонов' },
   common: {
     loading: 'Загрузка',
   },

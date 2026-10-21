@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     # Каталог собранного фронтенда (frontend/dist). Если не задан или не существует, не раздаём.
     static_dir: str | None = "../frontend/dist"
 
+    # Каталог ресурсов редактора: config.json, icons/, images/, bullets/ и т.д.
+    # (каталог ресурсов РТК, не хранится в git). Если не задан, редактор работает без каталога.
+    resources_dir: str | None = None
+    editor_profile: str = "default"
+
     py_platform_api_base: str | None = None
     py_platform_send_status: str | None = None
 

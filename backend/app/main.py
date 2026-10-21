@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings
+from app.editor_resources import RESOURCE_DIRS
 from app.errors import register_error_handlers
 from app.identity import DevIdentityProvider, IdentityProvider, PlatformJwtProvider
 from app.logging_setup import RequestIdMiddleware, configure_logging
@@ -14,6 +15,7 @@ from app.platform import HttpPlatformClient, PlatformClient, PodStatus, StubPlat
 from app.repository import Repository, SqlRepository
 from app.repository.sql import make_engine
 from app.routes import router
+from app.routes_editor import router as editor_router
 from app.routes_templates import router as templates_router
 
 
@@ -60,8 +62,20 @@ def create_app(
     register_error_handlers(app)
     app.include_router(router)
     app.include_router(templates_router)
+    app.include_router(editor_router)
+    _mount_resources(app, settings.resources_dir)
     _mount_static(app, settings.static_dir)
     return app
+
+
+def _mount_resources(app: FastAPI, resources_dir: str | None) -> None:
+    # Картинки редактора раздаются от корня сайта, поэтому монтируются до фронтенда.
+    if not resources_dir:
+        return
+    for name in RESOURCE_DIRS:
+        directory = Path(resources_dir) / name
+        if directory.is_dir():
+            app.mount(f"/{name}", StaticFiles(directory=directory), name=f"resources-{name}")
 
 
 def _mount_static(app: FastAPI, static_dir: str | None) -> None:

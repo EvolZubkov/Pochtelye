@@ -1,0 +1,317 @@
+/**
+ * @module templatesAPI
+ * @description REST client for template CRUD operations.
+ * Maintains an in-memory cache of individual template data, keyed by
+ * {@code "id:type"}.  The cache is invalidated automatically whenever the
+ * server returns a new ETag from the list endpoint, ensuring cards and
+ * modals never display stale content.
+ */
+
+/**
+ * Identifies correctly-generated preview thumbnails.
+ * Version 1 (absent / falsy) = legacy html2canvas screenshot of the admin
+ * canvas element — includes UI chrome, must be ignored.
+ * Version 2 = iframe-rendered clean email HTML, safe to display.
+ *
+ * Bump this constant whenever the thumbnail generation method changes in a
+ * way that makes older stored images visually wrong.
+ *
+ * @constant {number}
+ */
+const TEMPLATE_PREVIEW_VERSION = 2;
+
+const TemplatesAPI = {
+    // ИСПОЛЬЗУЕМ ОТНОСИТЕЛЬНЫЙ ПУТЬ - работает на любом порту!
+    baseURL: '/api/templates',  // ← БЕЗ http://localhost:XXXX
+
+    /**
+     * Current user's identity key (email address).
+     * Set at app startup from Exchange credentials.
+     * Sent as the X-User-Key request header for all personal-template
+     * operations so the backend namespaces each user's templates separately.
+     * Null/empty → backend uses the 'default' slug.
+     * @type {string|null}
+     */
+    userKey: null,
+
+    /**
+     * In-memory template data cache.
+     * Maps {@code "id:type"} strings to template data objects.
+     * Cleared whenever {@link getList} receives new data from the server.
+     *
+     * @private
+     * @type {Map<string, object>}
+     */
+    _cache: new Map(),
+
+    /**
+     * Discard all cached template data.
+     * Called automatically by {@link getList} when the server ETag changes.
+     *
+     * @private
+     * @returns {void}
+     */
+    _invalidateCache() {
+        this._cache.clear();
+    },
+
+    /** @private Returns X-User-Key header object when userKey is set. */
+    _userHeader() {
+        return this.userKey ? { 'X-User-Key': this.userKey } : {};
+    },
+
+    /**
+     * Fetch the template list from the server.
+     *
+     * Sends a conditional GET using the supplied ETag so the server can reply
+     * with 304 Not Modified when nothing has changed, saving both network I/O
+     * and JSON parsing.
+     *
+     * @param {string|null} etag - ETag value from the previous response, or null.
+     * @returns {{ unchanged: boolean, templates?: object, etag?: string }}
+     *   When ``unchanged`` is true the caller should reuse its cached data.
+     */
+    async getList(etag = null) {
+        try {
+            const headers = { ...this._userHeader() };
+            if (etag) headers['If-None-Match'] = etag;
+
+            const response = await fetch(`${this.baseURL}/list`, { headers });
+
+            if (response.status === 304) {
+                return { unchanged: true };
+            }
+
+            const data = await response.json();
+            if (data.success) {
+                // New list data — individual template cache is stale.
+                this._invalidateCache();
+                return {
+                    unchanged: false,
+                    templates: data.templates,
+                    etag: response.headers.get('ETag') || null,
+                };
+            }
+            console.error('Ошибка загрузки списка шаблонов:', data.error);
+            return { unchanged: false, templates: { shared: [], personal: [] }, etag: null };
+        } catch (error) {
+            console.error('Ошибка запроса списка шаблонов:', error);
+            return { unchanged: false, templates: { shared: [], personal: [] }, etag: null };
+        }
+    },
+
+    /**
+     * Load a template by stable id.
+     *
+     * Results are cached in {@link _cache} after the first successful fetch.
+     * Subsequent calls with the same {@code id} and {@code type} return the
+     * cached object directly without a network round-trip.  The cache is
+     * automatically cleared when {@link getList} receives updated data from
+     * the server.
+     *
+     * @param {string} id - Template stable identifier.
+     * @param {string} [type='personal'] - Template type: {@code 'personal'} or {@code 'shared'}.
+     * @returns {Promise<object|null>} Template data, {@code {notFound: true}}, or {@code null} on error.
+     */
+    async load(id, type = 'personal') {
+        const key = `${id}:${type}`;
+        if (this._cache.has(key)) return this._cache.get(key);
+        try {
+            const headers = type === 'personal' ? this._userHeader() : {};
+            const response = await fetch(`${this.baseURL}/load?id=${encodeURIComponent(id)}&type=${type}`, { headers });
+            if (response.status === 404) {
+                return { notFound: true };
+            }
+            const data = await response.json();
+            if (data.success) {
+                this._cache.set(key, data.template);
+                return data.template;
+            }
+            console.error('Ошибка загрузки шаблона:', data.error);
+            Toast.error('Ошибка загрузки шаблона: ' + data.error);
+            return null;
+        } catch (error) {
+            console.error('Ошибка запроса шаблона:', error);
+            Toast.error('Ошибка подключения к серверу');
+            return null;
+        }
+    },
+
+    /**
+     * Сохранить новый шаблон
+     */
+    async save(name, blocks, type = 'personal', category = '', preview = null, isPreset = false) {
+        try {
+            const response = await fetch(`${this.baseURL}/save`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(type === 'personal' ? this._userHeader() : {}),
+                },
+                body: JSON.stringify({
+                    name: name,
+                    blocks: blocks,
+                    type: type,
+                    category: category,
+                    preview: preview,
+                    isPreset: isPreset
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                console.log('✅ Шаблон сохранён:', data.id);
+                return data.id || null;
+            } else {
+                console.error('Ошибка сохранения шаблона:', data.error);
+                Toast.error('Ошибка сохранения: ' + data.error);
+                return null;
+            }
+        } catch (error) {
+            console.error('Ошибка запроса сохранения:', error);
+            Toast.error('Ошибка подключения к серверу');
+            return null;
+        }
+    },
+
+    /**
+     * Update blocks (and optionally preview) of an existing template, by id.
+     */
+    async update(id, type = 'personal', blocks, preview = null) {
+        try {
+            const response = await fetch(`${this.baseURL}/update`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', ...(type === 'personal' ? this._userHeader() : {}) },
+                body: JSON.stringify({ id, type, blocks, preview }),
+            });
+            const data = await response.json();
+            if (data.success) {
+                console.log('✅ Шаблон обновлён:', id);
+                return true;
+            }
+            console.error('Ошибка обновления шаблона:', data.error);
+            Toast.error('Ошибка обновления: ' + data.error);
+            return false;
+        } catch (error) {
+            console.error('Ошибка запроса обновления:', error);
+            Toast.error('Ошибка подключения к серверу');
+            return false;
+        }
+    },
+
+    /**
+     * Delete a template by id.
+     */
+    async delete(id, type = 'personal') {
+        try {
+            const response = await fetch(
+                `${this.baseURL}/delete?id=${encodeURIComponent(id)}&type=${type}`,
+                { method: 'DELETE', headers: type === 'personal' ? this._userHeader() : {} }
+            );
+            const data = await response.json();
+            if (data.success) {
+                console.log('✅ Шаблон удалён:', id);
+                return true;
+            }
+            console.error('Ошибка удаления шаблона:', data.error);
+            Toast.error('Ошибка удаления: ' + data.error);
+            return false;
+        } catch (error) {
+            console.error('Ошибка запроса удаления:', error);
+            Toast.error('Ошибка подключения к серверу');
+            return false;
+        }
+    },
+
+    /**
+     * Rename a template by id (in-place, file path unchanged).
+     * Returns true on success, false on failure.
+     */
+    async rename(id, newName, type = 'personal') {
+        try {
+            const response = await fetch(`${this.baseURL}/rename`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, newName, type }),
+            });
+            const data = await response.json();
+            if (data.success) {
+                console.log('✅ Шаблон переименован:', id, '→', newName);
+                return true;
+            }
+            console.error('Ошибка переименования шаблона:', data.error);
+            Toast.error('Ошибка переименования: ' + data.error);
+            return false;
+        } catch (error) {
+            console.error('Ошибка запроса переименования:', error);
+            Toast.error('Ошибка подключения к серверу');
+            return false;
+        }
+    },
+    /**
+     * Update only the preview thumbnail of an existing template.
+     * Does not touch blocks — safe to call in background after blocks are already saved.
+     * Passes {@link TEMPLATE_PREVIEW_VERSION} so the list endpoint can later
+     * distinguish correctly-generated thumbnails from legacy ones.
+     *
+     * @param {string} id
+     * @param {string} type
+     * @param {string|null} preview - base64 data-URL or null to clear
+     * @returns {boolean}
+     */
+    async updatePreview(id, type = 'personal', preview) {
+        try {
+            const response = await fetch(`${this.baseURL}/preview`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, type, preview, previewVersion: TEMPLATE_PREVIEW_VERSION }),
+            });
+            const data = await response.json();
+            return data.success === true;
+        } catch {
+            return false;
+        }
+    },
+
+    /**
+     * Получить список категорий
+     */
+    async getCategories() {
+        try {
+            const response = await fetch(`${this.baseURL}/categories`);
+            const data = await response.json();
+            
+            if (data.success) {
+                return data.categories || [];
+            } else {
+                console.error('Ошибка загрузки категорий:', data.error);
+                return [];
+            }
+        } catch (error) {
+            console.error('Ошибка запроса категорий:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Сохранить новую категорию
+     */
+    async saveCategory(categoryName) {
+        try {
+            const response = await fetch(`${this.baseURL}/categories`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ name: categoryName })
+            });
+            
+            const data = await response.json();
+            return data.success;
+        } catch (error) {
+            console.error('Ошибка сохранения категории:', error);
+            return false;
+        }
+    }
+};

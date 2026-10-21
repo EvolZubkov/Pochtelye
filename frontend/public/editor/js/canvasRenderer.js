@@ -1,0 +1,296 @@
+// canvasRenderer.js - Отрисовка canvas и блоков
+
+function renderCanvas() {
+    const canvas = document.getElementById('canvas');
+
+    // Preserve scroll position — full innerHTML reset would reset scrollTop to 0.
+    const savedScroll = canvas.scrollTop;
+
+    if (AppState.blocks.length === 0) {
+        canvas.innerHTML = `
+            <div class="canvas-empty">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <h3>Письмо пока пустое</h3>
+                <p>Добавьте блоки из левой панели или откройте раздел шаблонов.</p>
+                <div class="empty-state-hints">
+                    <span class="empty-hint">Блоки</span>
+                    <span class="empty-hint">Шаблоны</span>
+                    <span class="empty-hint">Пресеты</span>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    canvas.innerHTML = '';
+    AppState.blocks.forEach((block, index) => {
+        const blockElement = createBlockElement(block, index);
+        canvas.appendChild(blockElement);
+    });
+
+    canvas.scrollTop = savedScroll;
+
+    ensureListBulletsRendered(AppState.blocks);
+}
+
+// Самоисцеление для шаблонов, сохранённых до появления кеша
+// renderedBulletFlat (см. imageRenderers.js): без него обычный (не
+// нумерованный) буллет-список ссылается на bullets/*.png на локальном
+// сервере приложения — картинка бьётся, как только письмо реально уходит
+// получателю. Догоняем кеш при каждом рендере канваса, без участия админа.
+function ensureListBulletsRendered(blocks) {
+    (blocks || []).forEach(block => {
+        if (block.type === 'list' && needsFlatBulletRender(block)) {
+            block.settings._bulletRenderAttempted = true;
+            renderListBulletsToDataUrls(block, () => {
+                renderCanvas();
+            });
+        }
+        if (block.columns) {
+            block.columns.forEach(col => ensureListBulletsRendered(col.blocks));
+        }
+    });
+}
+
+function needsFlatBulletRender(block) {
+    const s = block.settings || {};
+    if (s._bulletRenderAttempted || s.listStyle === 'numbered' || s.renderedBulletFlat) return false;
+    const bulletSrc = s.bulletCustom || ((BULLET_TYPES.find(b => b.id === s.bulletType || b.src === s.bulletType) || BULLET_TYPES[0])?.src || null);
+    return !!bulletSrc;
+}
+
+function createBlockElement(block, index) {
+    const div = document.createElement('div');
+    div.className = 'email-block';
+
+    if (block.id === AppState.selectedBlockId) {
+        div.classList.add('selected');
+    }
+
+    div.dataset.blockId = block.id;
+
+    // ✅ подсветка мультивыбора (для пресетов)
+    if (AppState.multiSelectedBlockIds && AppState.multiSelectedBlockIds.has(block.id)) {
+        div.classList.add('multi-selected');
+    }
+
+    // Если блок НЕ разбит на колонки — обычный dnd
+    if (!block.columns) {
+        div.draggable = true;
+        div.addEventListener('dragstart', (e) => {
+            const multi = AppState.multiSelectedBlockIds || new Set();
+            const isGroup = multi.has(block.id) && multi.size > 1;
+            handleDragStart(e, index, block, isGroup);
+        });
+        div.addEventListener('dragover', (e) => handleDragOver(e, index));
+        div.addEventListener('drop', (e) => handleDrop(e, index));
+        div.addEventListener('dragend', handleDragEnd);
+    } else {
+        div.draggable = true;
+    }
+
+    // Клик для выбора блока
+    div.addEventListener('click', (e) => {
+        if (!e.target.closest('.block-action-btn')) {
+            handleBlockSelectionClick(block.id, e);
+        }
+    });
+
+    const header = createBlockHeader(block);
+    const content = createBlockContent(block);
+
+    div.appendChild(header);
+    div.appendChild(content);
+
+    return div;
+}
+
+function createBlockHeader(block) {
+    const header = document.createElement('div');
+    header.className = 'block-header';
+
+    const splitBtn = !block.columns ? `
+        <button class="block-action-btn split"
+                onclick="splitBlockIntoColumns(${block.id}); event.stopPropagation();"
+                title="Разбить на колонки">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="4" y="4" width="7" height="16"></rect>
+                <rect x="13" y="4" width="7" height="16"></rect>
+            </svg>
+        </button>
+    ` : block.type === 'group_container' ? `
+        <button class="block-action-btn ungroup"
+                onclick="ungroupBlock(${block.id}); event.stopPropagation();"
+                title="Разгруппировать">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="4" y="4" width="7" height="7"></rect>
+                <rect x="13" y="4" width="7" height="7"></rect>
+                <rect x="4" y="13" width="7" height="7"></rect>
+                <rect x="13" y="13" width="7" height="7"></rect>
+            </svg>
+        </button>
+    ` : `
+        <button class="block-action-btn merge"
+                onclick="mergeColumns(${block.id}); event.stopPropagation();"
+                title="Объединить колонки">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="5" y="4" width="14" height="16"></rect>
+            </svg>
+        </button>
+    `;
+
+    header.innerHTML = `
+        <span class="block-title">${getBlockTypeName(block.type)}</span>
+        <div class="block-actions">
+            ${splitBtn}
+            <button class="block-action-btn delete" 
+                    onclick="deleteBlock(${block.id}); event.stopPropagation();" 
+                    title="Удалить блок">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6l-1 14H6L5 6"></path>
+                    <path d="M10 11v6"></path>
+                    <path d="M14 11v6"></path>
+                    <path d="M9 6V4h6v2"></path>
+                </svg>
+            </button>
+        </div>
+    `;
+
+    return header;
+}
+
+function createBlockContent(block) {
+    const content = document.createElement('div');
+    content.className = 'block-content';
+    // Баннер — без отступа. Остальные — левый отступ из профиля (padding внутри блока).
+    if (block.type !== 'banner') {
+        const cp = (typeof ProfileLoader !== 'undefined' && ProfileLoader.loaded)
+            ? ProfileLoader.getContentPadding() : 27;
+        if (cp > 0) {
+            content.style.paddingLeft = `${cp}px`;
+            content.style.paddingRight = `${cp}px`;
+        }
+    }
+    content.innerHTML = block.columns ? renderColumnsPreview(block) : renderBlockPreviewReal(block);
+    return content;
+}
+
+function renderColumnsPreview(block) {
+    if (!block.columns) return '';
+
+    const s = block.settings || {};
+
+    // Vertical alignment of column content within the row
+    const valign = s.colValign || 'top';
+    const toAlignValue = (v) => v === 'middle' ? 'center' : v === 'bottom' ? 'flex-end' : 'flex-start';
+    const alignItems = toAlignValue(valign);
+    // Зазор между колонками (по умолчанию совпадает с .columns-container
+    // { gap:12px } в modular-styles.css) и между блоками внутри одной
+    // колонки (по умолчанию совпадает с .column-content { gap:12px }) —
+    // задаются inline-стилем, чтобы переопределить статический CSS-класс.
+    const colGap = s.colGap ?? 12;
+    const blockGap = s.blockGap ?? 12;
+    // .columns-container — flexbox с gap; при чистых процентах, суммирующихся
+    // в 100%, и flex-shrink:0 у .column ряд гарантированно шире контейнера
+    // ровно на суммарный gap (та же природа бага, что и с width+padding в
+    // письме, см. generateColumnsHTML) — визуально это может обрезаться
+    // родителем, из-за чего смена процентов колонок кажется "не работающей".
+    // Вычитаем суммарный gap из 100% через calc(), прежде чем брать долю.
+    const totalGapPx = colGap * Math.max(0, block.columns.length - 1);
+
+    // Передаём фон контейнера дочерним блокам через глобальный контекст
+    const prevParentBg = window._previewParentBg;
+    window._previewParentBg = (s.bgEnabled !== false && s.bgColor) ? s.bgColor : null;
+
+    const columnsHTML = block.columns.map(column => {
+        const columnBlocks = column.blocks.map(childBlock => `
+            <div class="email-block column-block ${AppState.multiSelectedBlockIds && AppState.multiSelectedBlockIds.has(childBlock.id) ? 'multi-selected' : ''}"
+                 data-block-id="${childBlock.id}"
+                 data-parent-id="${block.id}"
+                 data-column-id="${column.id}"
+                 draggable="true"
+                 onclick="handleBlockSelectionClick(${childBlock.id}, event); event.stopPropagation();"
+                 ondragstart="handleColumnBlockDragStart(event, ${childBlock.id}, ${block.id}, ${column.id})">
+                <div class="block-header">
+                    <span class="block-title">${getBlockTypeName(childBlock.type)}</span>
+                    <div class="block-actions">
+                        <button class="block-action-btn delete"
+                                onclick="deleteColumnBlock(${block.id}, ${column.id}, ${childBlock.id}); event.stopPropagation();"
+                                title="Удалить блок">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6l-1 14H6L5 6"></path>
+                                <path d="M10 11v6"></path>
+                                <path d="M14 11v6"></path>
+                                <path d="M9 6V4h6v2"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="block-content">
+                    ${renderBlockPreviewReal(childBlock)}
+                </div>
+            </div>
+        `).join('');
+
+        const dropZoneHTML = column.blocks.length === 0 ? `
+            <div class="column-drop-zone" data-column-id="${column.id}" data-parent-id="${block.id}">
+                <p>Перетащите блок сюда</p>
+            </div>
+        ` : '';
+
+        // min-width:0 обязателен — у flex-элементов дефолт min-width:auto,
+        // из-за которого колонка НИКОГДА не сжимается уже своего контента
+        // (текста/картинки), даже если явно задать маленький width — именно
+        // это и делало смену % ширины "невидимой" (колонка держится на
+        // ширине контента, а не на заданном проценте).
+        // align-self переопределяет align-items родителя для ЭТОЙ колонки —
+        // column.valign (если задан в панели настроек) важнее общего colValign.
+        const columnAlignSelf = column.valign ? toAlignValue(column.valign) : 'auto';
+        return `
+            <div class="column" style="width: calc((100% - ${totalGapPx}px) * ${column.width} / 100); min-width: 0; align-self: ${columnAlignSelf};" data-column-id="${column.id}">
+                <div class="column-content" data-parent-id="${block.id}" data-column-id="${column.id}" style="gap:${blockGap}px;">
+                    ${columnBlocks}
+                    ${dropZoneHTML}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Восстанавливаем контекст после рендера детей
+    window._previewParentBg = prevParentBg;
+
+    if (s.bgEnabled !== false && s.bgColor) {
+        if (s.bgFullWidth) {
+            // Фон "вырывается" за пределы contentPadding родителя (margin отрицательный),
+            // а колонки остаются на прежней визуальной позиции (компенсируем padding'ом).
+            const cp = (typeof ProfileLoader !== 'undefined' && ProfileLoader.loaded)
+                ? ProfileLoader.getContentPadding() : 27;
+            return `<div style="background:${s.bgColor};border-radius:${s.bgRadius || 0}px;margin:0 -${cp}px;padding:${s.bgPadding || 0}px ${(s.bgPadding || 0) + cp}px;">
+                <div class="columns-container" style="align-items:${alignItems}; gap:${colGap}px;">${columnsHTML}</div>
+            </div>`;
+        }
+        return `<div style="background:${s.bgColor};border-radius:${s.bgRadius || 0}px;padding:${s.bgPadding || 0}px;">
+            <div class="columns-container" style="align-items:${alignItems}; gap:${colGap}px;">${columnsHTML}</div>
+        </div>`;
+    }
+    return `<div class="columns-container" style="align-items:${alignItems}; gap:${colGap}px;">${columnsHTML}</div>`;
+}
+
+function setupCanvas() {
+    const canvas = document.getElementById('canvas');
+
+    canvas.addEventListener('click', (e) => {
+        if (e.target === canvas || e.target.classList.contains('canvas-empty')) {
+            AppState.clearSelection();
+            renderCanvas();
+            renderSettings();
+        }
+    });
+
+    setupCanvasDragDrop(canvas);
+}

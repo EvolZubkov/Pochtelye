@@ -1,0 +1,7 @@
+.editor-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 120px);
+  min-height: 480px;
+  border: 0;
+}
