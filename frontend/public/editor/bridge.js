@@ -27,6 +27,7 @@
         '/api/credentials',
         '/api/send',
         '/api/bulk',
+        '/api/recipients',
         '/api/app-settings',
         '/api/user-resources',
         '/api/shared-resources',
@@ -184,6 +185,8 @@
         'POST /api/mode': () => json({ success: true, mode: 'user' }),
         'POST /api/heartbeat': () => json({ success: true }),
         'POST /api/jslog': () => json({ success: true }),
+        // Плашку версии v2 не показываем: номер v2 в v3 вводил бы в заблуждение.
+        'GET /api/version': () => failure('Недоступно в этой версии', 404),
     };
 
     function jsonRequest(method, payload) {
