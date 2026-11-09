@@ -19,7 +19,9 @@ class PodStatus(StrEnum):
 
 
 class PlatformClient(Protocol):
-    async def send_status(self, status: PodStatus) -> None: ...
+    async def send_status(
+        self, status: PodStatus, error_description: str | None = None
+    ) -> None: ...
 
 
 class StubPlatformClient:
@@ -28,7 +30,9 @@ class StubPlatformClient:
     def __init__(self) -> None:
         self.sent: list[PodStatus] = []
 
-    async def send_status(self, status: PodStatus) -> None:
+    async def send_status(
+        self, status: PodStatus, error_description: str | None = None
+    ) -> None:
         self.sent.append(status)
         log.info("platform_status_stub", status=status.value)
 
@@ -36,7 +40,8 @@ class StubPlatformClient:
 class HttpPlatformClient:
     """Шлёт статусы в POST /pods/status (URL берётся из PY_PLATFORM_SEND_STATUS).
 
-    Формат тела `{"status": ...}` предположительный: уточнить по статье платформы.
+    Тело: `{"status": ..., "errorDescription": ...}`; errorDescription только для ERROR
+    (формат подтверждён платформой).
     Сбой отправки не роняет приложение, но логируется: без статуса скрипт не стартует,
     а после TERMINATING статус отвергается.
     """
@@ -45,12 +50,17 @@ class HttpPlatformClient:
         self._status_url = status_url
         self._jwt_token = jwt_token
 
-    async def send_status(self, status: PodStatus) -> None:
+    async def send_status(
+        self, status: PodStatus, error_description: str | None = None
+    ) -> None:
+        body: dict[str, str] = {"status": status.value}
+        if error_description:
+            body["errorDescription"] = error_description
         headers = {"jwt": self._jwt_token} if self._jwt_token else {}
         try:
             async with httpx.AsyncClient(timeout=STATUS_TIMEOUT_SECONDS) as client:
                 response = await client.post(
-                    self._status_url, json={"status": status.value}, headers=headers
+                    self._status_url, json=body, headers=headers
                 )
                 response.raise_for_status()
         except httpx.HTTPError as exc:

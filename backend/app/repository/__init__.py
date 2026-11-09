@@ -1,5 +1,7 @@
 from app.repository.base import (
     Audience,
+    Group,
+    NewGroup,
     NewSend,
     NewTemplate,
     NewUser,
@@ -24,6 +26,8 @@ from app.repository.sql import SqlRepository
 __all__ = [
     "Audience",
     "DuplicateEmailError",
+    "Group",
+    "NewGroup",
     "NewSend",
     "NewTemplate",
     "NewUser",

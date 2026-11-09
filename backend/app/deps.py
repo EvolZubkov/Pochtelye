@@ -43,6 +43,10 @@ def get_current_user(
         user = repository.ensure_admin(identity.sub)
     else:
         user = repository.get_user_by_sub(identity.sub)
+        if user is None and identity.verified and identity.login:
+            user = repository.claim_by_email(
+                identity.login, identity.sub, identity.name, datetime.now(UTC)
+            )
     if user is None:
         raise AppError("not_activated", "Доступ не активирован: нужен код приглашения", 403)
 

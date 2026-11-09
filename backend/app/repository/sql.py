@@ -5,6 +5,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.repository.models import Base
 from app.repository.sql_audiences import AudiencesMixin
+from app.repository.sql_groups import GroupsMixin
 from app.repository.sql_sendlog import SendLogMixin
 from app.repository.sql_templates import TemplatesMixin
 from app.repository.sql_users import UsersMixin
@@ -22,6 +23,6 @@ def make_engine(database_url: str) -> Engine:
     return create_engine(database_url, pool_pre_ping=True)
 
 
-class SqlRepository(UsersMixin, AudiencesMixin, TemplatesMixin, SendLogMixin):
+class SqlRepository(UsersMixin, AudiencesMixin, GroupsMixin, TemplatesMixin, SendLogMixin):
     def __init__(self, engine: Engine) -> None:
         self._sessions = sessionmaker(engine, expire_on_commit=False)

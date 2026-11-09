@@ -1,6 +1,7 @@
 """Правила доступа к шаблонам.
 
 - viewer: читает общие шаблоны и свои личные, ничего не меняет.
+- Группа может ограничить видимые категории общих шаблонов (см. access.py).
 - editor: создаёт и меняет только свои личные шаблоны.
 - admin: дополнительно управляет общими шаблонами и видит их все на запись.
 """
@@ -12,8 +13,16 @@ from app.repository.base import TemplateSummary
 _CAN_CREATE_PERSONAL = {Role.EDITOR, Role.ADMIN}
 
 
-def can_read_template(user: User, template: TemplateSummary) -> bool:
-    return template.scope == TemplateScope.SHARED or template.owner_sub == user.sub
+def can_read_template(
+    user: User,
+    template: TemplateSummary,
+    shared_categories: frozenset[str] | None = None,
+) -> bool:
+    if template.owner_sub == user.sub:
+        return True
+    if template.scope != TemplateScope.SHARED:
+        return False
+    return shared_categories is None or template.category in shared_categories
 
 
 def can_create_template(user: User, scope: TemplateScope) -> bool:

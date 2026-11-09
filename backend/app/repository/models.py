@@ -26,6 +26,7 @@ class UserRow(Base):
     display_name: Mapped[str | None] = mapped_column(String(255), default=None)
     role: Mapped[str] = mapped_column(String(16))
     audience_id: Mapped[str | None] = mapped_column(String(36), index=True, default=None)
+    group_id: Mapped[str | None] = mapped_column(String(36), index=True, default=None)
     invite_hash: Mapped[str | None] = mapped_column(String(64), index=True, default=None)
     invite_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
@@ -42,6 +43,20 @@ class AudienceRow(Base):
     name: Mapped[str] = mapped_column(String(100))
     profile: Mapped[dict] = mapped_column(JSON, default=dict)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class GroupRow(Base):
+    __tablename__ = "groups"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    audience_id: Mapped[str] = mapped_column(String(36), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    features: Mapped[dict] = mapped_column(JSON, default=dict)
+    categories: Mapped[list | None] = mapped_column(JSON, default=None)
+    limits: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)

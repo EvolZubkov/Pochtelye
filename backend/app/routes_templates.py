@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import Field, field_validator
 
 from app import permissions
+from app.access import Access, get_access
 from app.deps import get_current_user, get_repository
 from app.envelope import CamelModel, Envelope, ok
 from app.repository import (
@@ -83,9 +84,13 @@ def _full_dto(t: Template) -> dict:
     return {**_summary_dto(t), "blocks": list(t.blocks)}
 
 
-def _load_readable(repository: Repository, user: User, template_id: str) -> Template:
+def _load_readable(
+    repository: Repository, user: User, access: Access, template_id: str
+) -> Template:
     template = repository.get_template(template_id)
-    if template is None or not permissions.can_read_template(user, template):
+    if template is None or not permissions.can_read_template(
+        user, template, access.shared_categories
+    ):
         raise permissions.not_found()
     return template
 
@@ -96,9 +101,12 @@ def list_templates(
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     scope: TemplateScope | None = None,
     user: User = Depends(get_current_user),
+    access: Access = Depends(get_access),
     repository: Repository = Depends(get_repository),
 ) -> dict:
-    result = repository.list_templates(user.sub, page, limit, scope)
+    result = repository.list_templates(
+        user.sub, page, limit, scope, access.shared_categories
+    )
     meta = {"total": result.total, "page": page, "limit": limit}
     return ok([_summary_dto(t) for t in result.items], meta)
 
@@ -107,9 +115,10 @@ def list_templates(
 def get_template(
     template_id: str,
     user: User = Depends(get_current_user),
+    access: Access = Depends(get_access),
     repository: Repository = Depends(get_repository),
 ) -> dict:
-    return ok(_full_dto(_load_readable(repository, user, template_id)))
+    return ok(_full_dto(_load_readable(repository, user, access, template_id)))
 
 
 @router.post("", response_model=Envelope, status_code=201)
@@ -137,9 +146,10 @@ def update_template(
     template_id: str,
     body: TemplateUpdate,
     user: User = Depends(get_current_user),
+    access: Access = Depends(get_access),
     repository: Repository = Depends(get_repository),
 ) -> dict:
-    existing = _load_readable(repository, user, template_id)
+    existing = _load_readable(repository, user, access, template_id)
     permissions.require(permissions.can_modify_template(user, existing))
     changes = body.model_dump(exclude_unset=True)
     updated = repository.update_template(template_id, changes)
@@ -152,9 +162,10 @@ def update_template(
 def delete_template(
     template_id: str,
     user: User = Depends(get_current_user),
+    access: Access = Depends(get_access),
     repository: Repository = Depends(get_repository),
 ) -> dict:
-    existing = _load_readable(repository, user, template_id)
+    existing = _load_readable(repository, user, access, template_id)
     permissions.require(permissions.can_modify_template(user, existing))
     if not repository.delete_template(template_id):
         raise permissions.not_found()

@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     resources_dir: str | None = None
     editor_profile: str = "default"
 
+    # Открытый ключ подписи JWT платформы (PEM). Пока не задан, подпись не проверяется и
+    # привязка пользователя по login отключена (только коды приглашений, ADR-0004).
+    jwt_public_key: str | None = None
+
     py_platform_api_base: str | None = None
     py_platform_send_status: str | None = None
 

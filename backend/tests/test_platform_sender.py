@@ -53,3 +53,15 @@ async def test_http_client_swallows_platform_errors(monkeypatch):
     _patch_transport(monkeypatch, _Recorder(500))
 
     await HttpPlatformClient("http://platform/pods/status").send_status(PodStatus.ERROR)
+
+
+async def test_http_client_sends_error_description_only_for_error(monkeypatch):
+    recorder = _Recorder(200)
+    _patch_transport(monkeypatch, recorder)
+    client = HttpPlatformClient("http://platform/pods/status")
+
+    await client.send_status(PodStatus.ERROR, "нет доступа к БД")
+    await client.send_status(PodStatus.RUNNING)
+
+    assert b"errorDescription" in recorder.requests[0].content
+    assert b"errorDescription" not in recorder.requests[1].content

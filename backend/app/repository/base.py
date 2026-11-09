@@ -25,6 +25,7 @@ class User:
     display_name: str | None
     role: Role
     audience_id: str | None
+    group_id: str | None
     created_at: datetime
     last_seen_at: datetime | None
     invite_expires_at: datetime | None
@@ -40,6 +41,7 @@ class NewUser:
     role: Role
     display_name: str | None = None
     audience_id: str | None = None
+    group_id: str | None = None
     sub: str | None = None
 
 
@@ -65,7 +67,7 @@ class UserRepository(Protocol):
         ...
 
     def update_user(self, user_id: str, changes: dict) -> User | None:
-        """changes: email, display_name, role, audience_id. Прочие ключи игнорируются."""
+        """changes: email, display_name, role, audience_id, group_id. Прочие ключи игнорируются."""
         ...
 
     def delete_user(self, user_id: str) -> bool:
@@ -78,9 +80,21 @@ class UserRepository(Protocol):
         """Привязывает sub к приглашённому пользователю и гасит код. None, если код не подошёл."""
         ...
 
+    def claim_by_email(
+        self, email: str, sub: str, display_name: str | None, now: datetime
+    ) -> User | None:
+        """Привязывает sub к заведённому админом пользователю по рабочей почте.
+
+        None, если такой почты нет или запись уже привязана. Вызывать только для login
+        из JWT с проверенной подписью.
+        """
+        ...
+
     def touch_last_seen(self, user_id: str, now: datetime) -> None: ...
 
     def count_users_by_audience(self, audience_id: str) -> int: ...
+
+    def count_users_by_group(self, group_id: str) -> int: ...
 
 
 @dataclass(frozen=True)
@@ -111,6 +125,52 @@ class AudienceRepository(Protocol):
     def delete_audience(self, audience_id: str) -> bool:
         """Мягкое удаление (deleted_at)."""
         ...
+
+
+@dataclass(frozen=True)
+class Group:
+    """Группа доступа внутри аудитории: что люди видят и могут в приложении.
+
+    features перекрывают features профиля аудитории; categories: какие категории общих
+    шаблонов видны (None: все); limits: лимиты на будущее (пока не проверяются).
+    Доступ к почтовым ящикам к группе не относится: он у пользователя и на стороне Exchange.
+    """
+
+    id: str
+    audience_id: str
+    name: str
+    features: dict[str, bool]
+    categories: tuple[str, ...] | None
+    limits: dict[str, int]
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class NewGroup:
+    audience_id: str
+    name: str
+    features: dict[str, bool]
+    categories: tuple[str, ...] | None = None
+    limits: dict[str, int] | None = None
+
+
+class GroupRepository(Protocol):
+    def list_groups(self) -> tuple[Group, ...]: ...
+
+    def get_group(self, group_id: str) -> Group | None: ...
+
+    def create_group(self, new: NewGroup) -> Group: ...
+
+    def update_group(self, group_id: str, changes: dict) -> Group | None:
+        """changes: name, features, categories, limits. Прочие ключи игнорируются."""
+        ...
+
+    def delete_group(self, group_id: str) -> bool:
+        """Мягкое удаление (deleted_at)."""
+        ...
+
+    def count_groups_by_audience(self, audience_id: str) -> int: ...
 
 
 class TemplateScope(StrEnum):
@@ -155,9 +215,17 @@ class TemplatePage:
 
 class TemplateRepository(Protocol):
     def list_templates(
-        self, viewer_sub: str, page: int, limit: int, scope: TemplateScope | None = None
+        self,
+        viewer_sub: str,
+        page: int,
+        limit: int,
+        scope: TemplateScope | None = None,
+        shared_categories: frozenset[str] | None = None,
     ) -> TemplatePage:
-        """Общие шаблоны и личные шаблоны viewer_sub; чужие личные не видны."""
+        """Общие шаблоны и личные шаблоны viewer_sub; чужие личные не видны.
+
+        shared_categories ограничивает только общие шаблоны (None: без ограничения).
+        """
         ...
 
     def get_template(self, template_id: str) -> Template | None: ...
@@ -236,6 +304,11 @@ class SendLogRepository(Protocol):
 
 
 class Repository(
-    UserRepository, AudienceRepository, TemplateRepository, SendLogRepository, Protocol
+    UserRepository,
+    AudienceRepository,
+    GroupRepository,
+    TemplateRepository,
+    SendLogRepository,
+    Protocol,
 ):
     """Полное хранилище приложения."""

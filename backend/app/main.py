@@ -39,7 +39,7 @@ def _build_platform_client(settings: Settings) -> PlatformClient:
 def _build_identity_provider(settings: Settings) -> IdentityProvider:
     if settings.is_dev:
         return DevIdentityProvider(settings.dev_user_sub)
-    return PlatformJwtProvider()
+    return PlatformJwtProvider(settings.jwt_public_key)
 
 
 def create_app(

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from app.repository.base import (
     NewTemplate,
@@ -45,12 +45,17 @@ class TemplatesMixin:
         )
 
     def list_templates(
-        self, viewer_sub: str, page: int, limit: int, scope: TemplateScope | None = None
+        self,
+        viewer_sub: str,
+        page: int,
+        limit: int,
+        scope: TemplateScope | None = None,
+        shared_categories: frozenset[str] | None = None,
     ) -> TemplatePage:
-        visible = or_(
-            TemplateRow.scope == TemplateScope.SHARED.value,
-            TemplateRow.owner_sub == viewer_sub,
-        )
+        shared = TemplateRow.scope == TemplateScope.SHARED.value
+        if shared_categories is not None:
+            shared = and_(shared, TemplateRow.category.in_(shared_categories))
+        visible = or_(shared, TemplateRow.owner_sub == viewer_sub)
         conditions = [TemplateRow.deleted_at.is_(None), visible]
         if scope is not None:
             conditions.append(TemplateRow.scope == scope.value)

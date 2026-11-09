@@ -8,7 +8,7 @@ from app.repository.convert import as_utc, required_utc
 from app.repository.errors import DuplicateEmailError
 from app.repository.models import UserRow, new_id, utcnow
 
-_USER_EDITABLE = ("email", "display_name", "role", "audience_id")
+_USER_EDITABLE = ("email", "display_name", "role", "audience_id", "group_id")
 
 
 def normalize_email(email: str | None) -> str | None:
@@ -23,6 +23,7 @@ def to_user(row: UserRow) -> User:
         display_name=row.display_name,
         role=Role(row.role),
         audience_id=row.audience_id,
+        group_id=row.group_id,
         created_at=required_utc(row.created_at),
         last_seen_at=as_utc(row.last_seen_at),
         invite_expires_at=as_utc(row.invite_expires_at),
@@ -92,6 +93,7 @@ class UsersMixin:
             row.display_name = new.display_name
             row.role = new.role.value
             row.audience_id = new.audience_id
+            row.group_id = new.group_id
             row.invite_hash = None
             row.invite_expires_at = None
             row.last_seen_at = None
@@ -159,6 +161,30 @@ class UsersMixin:
             row = session.scalar(select(UserRow).where(UserRow.sub == sub))
             return to_user(row)
 
+    def claim_by_email(
+        self, email: str, sub: str, display_name: str | None, now: datetime
+    ) -> User | None:
+        normalized = normalize_email(email)
+        if not normalized:
+            return None
+        with self._sessions.begin() as session:
+            # Условный UPDATE: привязать можно только ещё свободную запись.
+            claimed = session.execute(
+                update(UserRow)
+                .where(
+                    UserRow.deleted_at.is_(None),
+                    UserRow.sub.is_(None),
+                    UserRow.email == normalized,
+                )
+                .values(sub=sub, invite_hash=None, invite_expires_at=None, last_seen_at=now)
+            )
+            if claimed.rowcount != 1:
+                return None
+            row = session.scalar(select(UserRow).where(UserRow.sub == sub))
+            if display_name and not row.display_name:
+                row.display_name = display_name
+            return to_user(row)
+
     def touch_last_seen(self, user_id: str, now: datetime) -> None:
         with self._sessions.begin() as session:
             row = self._active_user(session, id=user_id)
@@ -172,6 +198,17 @@ class UsersMixin:
                     select(func.count())
                     .select_from(UserRow)
                     .where(UserRow.deleted_at.is_(None), UserRow.audience_id == audience_id)
+                )
+                or 0
+            )
+
+    def count_users_by_group(self, group_id: str) -> int:
+        with self._sessions() as session:
+            return (
+                session.scalar(
+                    select(func.count())
+                    .select_from(UserRow)
+                    .where(UserRow.deleted_at.is_(None), UserRow.group_id == group_id)
                 )
                 or 0
             )
