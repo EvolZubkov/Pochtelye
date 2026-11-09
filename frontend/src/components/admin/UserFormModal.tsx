@@ -2,27 +2,30 @@ import { Banner, Button, Input, Modal, Select } from '@universityrt/ui-kit';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { createUser, updateUser } from '../../api/admin';
-import type { AdminUser, Audience, UserWithInvite } from '../../api/admin';
+import type { AdminUser, Audience, Group, UserWithInvite } from '../../api/admin';
 import type { Role } from '../../api/me';
 import { errorMessage, t } from '../../i18n';
 
 const ROLES: Role[] = ['editor', 'viewer', 'admin'];
 const DEFAULT_ROLE: Role = 'editor';
 const NO_AUDIENCE = '';
+const NO_GROUP = '';
 
 interface UserFormModalProps {
   /** Пользователь для правки; без него форма создаёт нового. */
   user?: AdminUser;
   audiences: Audience[];
+  groups: Group[];
   onClose: () => void;
   onSaved: (created?: UserWithInvite) => void;
 }
 
-export function UserFormModal({ user, audiences, onClose, onSaved }: UserFormModalProps) {
+export function UserFormModal({ user, audiences, groups, onClose, onSaved }: UserFormModalProps) {
   const [email, setEmail] = useState(user?.email ?? '');
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [role, setRole] = useState<Role>(user?.role ?? DEFAULT_ROLE);
   const [audienceId, setAudienceId] = useState(user?.audienceId ?? NO_AUDIENCE);
+  const [groupId, setGroupId] = useState(user?.groupId ?? NO_GROUP);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -35,6 +38,7 @@ export function UserFormModal({ user, audiences, onClose, onSaved }: UserFormMod
       displayName: displayName.trim() || null,
       role,
       audienceId: audienceId || null,
+      groupId: groupId || null,
     };
     try {
       if (user) {
@@ -52,6 +56,18 @@ export function UserFormModal({ user, audiences, onClose, onSaved }: UserFormMod
   const audienceOptions = [
     { value: NO_AUDIENCE, label: t.admin.users.defaultAudience },
     ...audiences.map((audience) => ({ value: audience.id, label: audience.name })),
+  ];
+
+  const handleGroupChange = (nextGroupId: string) => {
+    setGroupId(nextGroupId);
+    const group = groups.find((item) => item.id === nextGroupId);
+    if (group) setAudienceId(group.audienceId);
+  };
+
+  const audienceLabel = (id: string) => audiences.find((a) => a.id === id)?.name ?? t.common.none;
+  const groupOptions = [
+    { value: NO_GROUP, label: t.admin.users.noGroup },
+    ...groups.map((group) => ({ value: group.id, label: `${group.name} (${audienceLabel(group.audienceId)})` })),
   ];
 
   return (
@@ -88,6 +104,14 @@ export function UserFormModal({ user, audiences, onClose, onSaved }: UserFormMod
           value={audienceId}
           onChange={setAudienceId}
           options={audienceOptions}
+          disabled={groupId !== NO_GROUP}
+          fullWidth
+        />
+        <Select
+          label={t.admin.users.form.group}
+          value={groupId}
+          onChange={handleGroupChange}
+          options={groupOptions}
           fullWidth
         />
         {error !== null && <Banner tone="error" title={errorMessage(error)} />}

@@ -1,4 +1,4 @@
-import type { AdminUser, Audience, SendRecord, SenderSummary } from '../api/admin';
+import type { AdminUser, Audience, Group, SendRecord, SenderSummary } from '../api/admin';
 
 export const adminUser = (over: Partial<AdminUser> = {}): AdminUser => ({
   id: 'u-1',
@@ -7,6 +7,7 @@ export const adminUser = (over: Partial<AdminUser> = {}): AdminUser => ({
   displayName: 'Анна',
   role: 'editor',
   audienceId: null,
+  groupId: null,
   status: 'active',
   createdAt: '2026-01-01T00:00:00Z',
   lastSeenAt: '2026-02-01T10:00:00Z',
@@ -20,6 +21,19 @@ export const audience = (over: Partial<Audience> = {}): Audience => ({
   profile: { blocks: { text: { enabled: true, capabilities: ['background'], defaults: { size: 14 } } } },
   isDefault: true,
   userCount: 2,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+  ...over,
+});
+
+export const group = (over: Partial<Group> = {}): Group => ({
+  id: 'g-1',
+  audienceId: 'a-1',
+  name: 'Рассылки',
+  features: { bulk_mail: true },
+  categories: null,
+  limits: {},
+  userCount: 5,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
   ...over,

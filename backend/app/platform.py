@@ -30,9 +30,7 @@ class StubPlatformClient:
     def __init__(self) -> None:
         self.sent: list[PodStatus] = []
 
-    async def send_status(
-        self, status: PodStatus, error_description: str | None = None
-    ) -> None:
+    async def send_status(self, status: PodStatus, error_description: str | None = None) -> None:
         self.sent.append(status)
         log.info("platform_status_stub", status=status.value)
 
@@ -50,18 +48,14 @@ class HttpPlatformClient:
         self._status_url = status_url
         self._jwt_token = jwt_token
 
-    async def send_status(
-        self, status: PodStatus, error_description: str | None = None
-    ) -> None:
+    async def send_status(self, status: PodStatus, error_description: str | None = None) -> None:
         body: dict[str, str] = {"status": status.value}
         if error_description:
             body["errorDescription"] = error_description
         headers = {"jwt": self._jwt_token} if self._jwt_token else {}
         try:
             async with httpx.AsyncClient(timeout=STATUS_TIMEOUT_SECONDS) as client:
-                response = await client.post(
-                    self._status_url, json=body, headers=headers
-                )
+                response = await client.post(self._status_url, json=body, headers=headers)
                 response.raise_for_status()
         except httpx.HTTPError as exc:
             log.error("platform_status_failed", status=status.value, error=type(exc).__name__)

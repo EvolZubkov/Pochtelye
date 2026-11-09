@@ -11,6 +11,7 @@ export interface AdminUser {
   displayName: string | null;
   role: Role;
   audienceId: string | null;
+  groupId: string | null;
   status: UserStatus;
   createdAt: string;
   lastSeenAt: string | null;
@@ -27,6 +28,7 @@ export interface UserInput {
   displayName: string | null;
   role: Role;
   audienceId: string | null;
+  groupId: string | null;
 }
 
 export const USERS_PAGE_SIZE = 20;
@@ -86,6 +88,39 @@ export const updateAudience = (id: string, input: Partial<AudienceInput>): Promi
 
 export const deleteAudience = (id: string): Promise<{ id: string }> =>
   apiSend('DELETE', `/api/admin/audiences/${id}`);
+
+export interface Group {
+  id: string;
+  audienceId: string;
+  name: string;
+  features: Record<string, boolean>;
+  /** Видимые категории общих шаблонов; null: видны все. */
+  categories: string[] | null;
+  /** Лимиты на будущее: сервер их пока не проверяет. */
+  limits: Record<string, number>;
+  userCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GroupInput {
+  audienceId: string;
+  name: string;
+  features: Record<string, boolean>;
+  categories: string[] | null;
+  limits: Record<string, number>;
+}
+
+export const fetchGroups = (): Promise<Group[]> => apiGet<Group[]>('/api/admin/groups');
+
+export const createGroup = (input: GroupInput): Promise<Group> =>
+  apiSend<Group>('POST', '/api/admin/groups', input);
+
+export const updateGroup = (id: string, input: Partial<Omit<GroupInput, 'audienceId'>>): Promise<Group> =>
+  apiSend<Group>('PATCH', `/api/admin/groups/${id}`, input);
+
+export const deleteGroup = (id: string): Promise<{ id: string }> =>
+  apiSend('DELETE', `/api/admin/groups/${id}`);
 
 export type SendStatus = 'sent' | 'failed';
 

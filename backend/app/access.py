@@ -40,9 +40,18 @@ def resolve_access(user: User, repository: Repository, settings: Settings) -> Ac
     if group is not None and group.features:
         profile["features"] = {**(profile.get("features") or {}), **group.features}
 
-    restricted = group is not None and group.categories is not None and user.role != Role.ADMIN
-    categories = frozenset(group.categories) if restricted else None
-    return Access(profile=profile, group=group, shared_categories=categories)
+    return Access(profile=profile, group=group, shared_categories=_visible_categories(user, group))
+
+
+def _visible_categories(user: User, group: Group | None) -> frozenset[str] | None:
+    if user.role == Role.ADMIN:
+        return None
+    if user.group_id and group is None:
+        # Группу удалили, а назначение осталось: безопаснее ничего не показывать.
+        return frozenset()
+    if group is not None and group.categories is not None:
+        return frozenset(group.categories)
+    return None
 
 
 def get_access(

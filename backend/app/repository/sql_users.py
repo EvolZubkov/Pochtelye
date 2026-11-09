@@ -167,23 +167,27 @@ class UsersMixin:
         normalized = normalize_email(email)
         if not normalized:
             return None
-        with self._sessions.begin() as session:
-            # Условный UPDATE: привязать можно только ещё свободную запись.
-            claimed = session.execute(
-                update(UserRow)
-                .where(
-                    UserRow.deleted_at.is_(None),
-                    UserRow.sub.is_(None),
-                    UserRow.email == normalized,
+        try:
+            with self._sessions.begin() as session:
+                # Условный UPDATE: привязать можно только ещё свободную запись.
+                claimed = session.execute(
+                    update(UserRow)
+                    .where(
+                        UserRow.deleted_at.is_(None),
+                        UserRow.sub.is_(None),
+                        UserRow.email == normalized,
+                    )
+                    .values(sub=sub, invite_hash=None, invite_expires_at=None, last_seen_at=now)
                 )
-                .values(sub=sub, invite_hash=None, invite_expires_at=None, last_seen_at=now)
-            )
-            if claimed.rowcount != 1:
-                return None
-            row = session.scalar(select(UserRow).where(UserRow.sub == sub))
-            if display_name and not row.display_name:
-                row.display_name = display_name
-            return to_user(row)
+                if claimed.rowcount == 1:
+                    row = session.scalar(select(UserRow).where(UserRow.sub == sub))
+                    if display_name and not row.display_name:
+                        row.display_name = display_name
+                    return to_user(row)
+        except IntegrityError:
+            pass  # параллельный запрос с тем же sub уже привязал запись
+        # Параллельный первый запрос мог привязать запись раньше: пускаем, если sub уже наш.
+        return self.get_user_by_sub(sub)
 
     def touch_last_seen(self, user_id: str, now: datetime) -> None:
         with self._sessions.begin() as session:

@@ -16,10 +16,11 @@ import {
   USERS_PAGE_SIZE,
   deleteUser,
   fetchAudiences,
+  fetchGroups,
   fetchUsers,
   reissueInvite,
 } from '../../api/admin';
-import type { AdminUser, Audience, UserWithInvite } from '../../api/admin';
+import type { AdminUser, Audience, Group, UserWithInvite } from '../../api/admin';
 import { formatDateTime, totalPages } from '../../format';
 import { useAsync, useReload } from '../../hooks/useAsync';
 import { useDebounced } from '../../hooks/useDebounced';
@@ -51,6 +52,10 @@ export function UsersPanel() {
   const users = useAsync(() => fetchUsers(page, search), [page, search, version]);
   const audiencesState = useAsync(fetchAudiences, [version]);
   const audiences: Audience[] = audiencesState.status === 'ready' ? audiencesState.data : [];
+  const groupsState = useAsync(fetchGroups, [version]);
+  const groups: Group[] = groupsState.status === 'ready' ? groupsState.data : [];
+  const groupName = (id: string | null) =>
+    id ? (groups.find((g) => g.id === id)?.name ?? t.common.none) : t.admin.users.noGroup;
   const audienceName = (id: string | null) =>
     id ? (audiences.find((a) => a.id === id)?.name ?? t.common.none) : t.admin.users.defaultAudience;
 
@@ -74,6 +79,7 @@ export function UsersPanel() {
     { key: 'name', header: t.admin.users.columns.name, render: (u: AdminUser) => u.displayName ?? t.common.none },
     { key: 'role', header: t.admin.users.columns.role, render: (u: AdminUser) => <Tag>{t.roles[u.role]}</Tag> },
     { key: 'audience', header: t.admin.users.columns.audience, render: (u: AdminUser) => audienceName(u.audienceId) },
+    { key: 'group', header: t.admin.users.columns.group, render: (u: AdminUser) => groupName(u.groupId) },
     {
       key: 'status',
       header: t.admin.users.columns.status,
@@ -141,6 +147,7 @@ export function UsersPanel() {
         <UserFormModal
           user={dialog.kind === 'edit' ? dialog.user : undefined}
           audiences={audiences}
+          groups={groups}
           onClose={() => setDialog(null)}
           onSaved={(created) => {
             if (created) setDialog(inviteDialog(created));

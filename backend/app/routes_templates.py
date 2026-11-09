@@ -104,9 +104,7 @@ def list_templates(
     access: Access = Depends(get_access),
     repository: Repository = Depends(get_repository),
 ) -> dict:
-    result = repository.list_templates(
-        user.sub, page, limit, scope, access.shared_categories
-    )
+    result = repository.list_templates(user.sub, page, limit, scope, access.shared_categories)
     meta = {"total": result.total, "page": page, "limit": limit}
     return ok([_summary_dto(t) for t in result.items], meta)
 

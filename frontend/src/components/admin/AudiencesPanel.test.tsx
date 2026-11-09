@@ -46,7 +46,7 @@ describe('AudiencesPanel', () => {
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Удалить' }));
 
-    expect(await within(dialog).findByText('Аудитория назначена пользователям.')).toBeInTheDocument();
+    expect(await within(dialog).findByText('Аудитория используется пользователями или группами.')).toBeInTheDocument();
   });
 
   it('deletes an unused audience after confirmation', async () => {

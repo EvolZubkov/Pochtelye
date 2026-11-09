@@ -43,7 +43,12 @@ def dev_client(repository, platform):
 
 @pytest.fixture
 def prod_client(repository, platform):
-    settings = Settings(env="prod", database_url="sqlite:///:memory:", static_dir=None)
+    settings = Settings(
+        env="prod",
+        database_url="sqlite:///:memory:",
+        static_dir=None,
+        allow_unsigned_jwt=True,
+    )
     app = create_app(settings, repository=repository, platform_client=platform)
     with TestClient(app) as client:
         yield client

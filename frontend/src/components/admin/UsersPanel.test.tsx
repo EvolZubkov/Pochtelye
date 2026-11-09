@@ -71,6 +71,7 @@ describe('UsersPanel', () => {
       displayName: null,
       role: 'editor',
       audienceId: null,
+      groupId: null,
     });
     expect(await screen.findByText('ABCD-EFGH-JKMN-PQRS')).toBeInTheDocument();
   });

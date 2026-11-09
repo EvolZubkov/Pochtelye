@@ -2,6 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import structlog
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -19,6 +20,8 @@ from app.routes import router
 from app.routes_admin import router as admin_router
 from app.routes_editor import router as editor_router
 from app.routes_templates import router as templates_router
+
+log = structlog.get_logger()
 
 
 def _ensure_default_audience(repository: Repository, settings: Settings) -> None:
@@ -39,6 +42,13 @@ def _build_platform_client(settings: Settings) -> PlatformClient:
 def _build_identity_provider(settings: Settings) -> IdentityProvider:
     if settings.is_dev:
         return DevIdentityProvider(settings.dev_user_sub)
+    if not settings.jwt_public_key:
+        if not settings.allow_unsigned_jwt:
+            raise RuntimeError(
+                "Не задан JWT_PUBLIC_KEY: подпись токена платформы не проверялась бы. "
+                "Задайте ключ или явно ALLOW_UNSIGNED_JWT=true (небезопасно)."
+            )
+        log.warning("jwt_signature_not_verified")
     return PlatformJwtProvider(settings.jwt_public_key)
 
 

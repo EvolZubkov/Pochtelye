@@ -214,3 +214,63 @@ def test_personal_templates_ignore_group_categories(multi_client):
     )
 
     assert _visible_names(multi_client, EDITOR_SUB) == ["Моё"]
+
+
+def test_user_with_deleted_group_sees_no_shared_templates(multi_client, repository):
+    _shared_template(multi_client, "Письмо 1", "Тема 1")
+    group_id = _group(multi_client, _audience(multi_client), categories=["Тема 1"]).json()["data"][
+        "id"
+    ]
+    _assign(multi_client, "editor1@rt.ru", group_id)
+    repository.delete_group(group_id)  # гонка: группу удалили вместе с назначением
+
+    assert _visible_names(multi_client, EDITOR_SUB) == []
+
+
+def test_assigning_group_takes_its_audience(multi_client):
+    audience_id = _audience(multi_client, name="B2C")
+    group_id = _group(multi_client, audience_id).json()["data"]["id"]
+
+    response = _assign(multi_client, "editor1@rt.ru", group_id)
+
+    assert response.json()["data"]["audienceId"] == audience_id
+
+
+def test_group_from_other_audience_is_rejected(multi_client):
+    first = _audience(multi_client, name="B2C")
+    second = _audience(multi_client, name="HR")
+    group_id = _group(multi_client, second).json()["data"]["id"]
+
+    response = multi_client.patch(
+        f"/api/admin/users/{_user_id(multi_client, 'editor1@rt.ru')}",
+        json={"groupId": group_id, "audienceId": first},
+        headers=_as(ADMIN_SUB),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "group_audience_mismatch"
+
+
+def test_changing_audience_of_user_in_group_is_rejected(multi_client):
+    group_id = _group(multi_client, _audience(multi_client, name="B2C")).json()["data"]["id"]
+    _assign(multi_client, "editor1@rt.ru", group_id)
+    other = _audience(multi_client, name="HR")
+
+    response = multi_client.patch(
+        f"/api/admin/users/{_user_id(multi_client, 'editor1@rt.ru')}",
+        json={"audienceId": other},
+        headers=_as(ADMIN_SUB),
+    )
+
+    assert response.status_code == 400
+
+
+def test_group_may_allow_uncategorized_shared_templates(multi_client):
+    _shared_template(multi_client, "Без темы", "")
+    _shared_template(multi_client, "Письмо 1", "Тема 1")
+    group_id = _group(multi_client, _audience(multi_client), categories=["", "Тема 1"]).json()[
+        "data"
+    ]["id"]
+    _assign(multi_client, "editor1@rt.ru", group_id)
+
+    assert _visible_names(multi_client, EDITOR_SUB) == ["Без темы", "Письмо 1"]

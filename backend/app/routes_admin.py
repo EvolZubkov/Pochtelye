@@ -108,9 +108,27 @@ def _require_audience(repository: Repository, audience_id: str | None) -> None:
         raise AppError("audience_not_found", "Аудитория не найдена", 400)
 
 
-def _require_group(repository: Repository, group_id: str | None) -> None:
-    if group_id is not None and repository.get_group(group_id) is None:
+def _group_audience(repository: Repository, group_id: str, audience_id: str | None) -> str:
+    """Аудитория пользователя в группе всегда аудитория группы; расхождение это ошибка."""
+    group = repository.get_group(group_id)
+    if group is None:
         raise AppError("group_not_found", "Группа не найдена", 400)
+    if audience_id is not None and audience_id != group.audience_id:
+        raise AppError("group_audience_mismatch", "Группа относится к другой аудитории", 400)
+    return group.audience_id
+
+
+def _reconcile_group_audience(repository: Repository, user_id: str, changes: dict) -> None:
+    """Правит changes так, чтобы аудитория пользователя совпадала с аудиторией его группы."""
+    if changes.get("group_id") is not None:
+        changes["audience_id"] = _group_audience(
+            repository, changes["group_id"], changes.get("audience_id")
+        )
+        return
+    if "audience_id" in changes and "group_id" not in changes:
+        existing = repository.get_user(user_id)
+        if existing is not None and existing.group_id:
+            _group_audience(repository, existing.group_id, changes["audience_id"])
 
 
 def _user_not_found() -> AppError:
@@ -146,14 +164,16 @@ def list_users(
 @router.post("/users", response_model=Envelope, status_code=201)
 def create_user(body: UserCreate, repository: Repository = Depends(get_repository)) -> dict:
     _require_audience(repository, body.audience_id)
-    _require_group(repository, body.group_id)
+    audience_id = body.audience_id
+    if body.group_id is not None:
+        audience_id = _group_audience(repository, body.group_id, body.audience_id)
     try:
         created = repository.create_user(
             NewUser(
                 email=body.email,
                 role=body.role,
                 display_name=body.display_name,
-                audience_id=body.audience_id,
+                audience_id=audience_id,
                 group_id=body.group_id,
             )
         )
@@ -178,7 +198,7 @@ def update_user(
     if user_id == admin.id and changes.get("role", Role.ADMIN) != Role.ADMIN:
         raise AppError("cannot_modify_self", "Нельзя снять права администратора с себя", 409)
     _require_audience(repository, changes.get("audience_id"))
-    _require_group(repository, changes.get("group_id"))
+    _reconcile_group_audience(repository, user_id, changes)
     try:
         updated = repository.update_user(user_id, changes)
     except DuplicateEmailError as exc:
@@ -313,6 +333,7 @@ MAX_GROUP_KEYS = 30
 MAX_CATEGORIES = 100
 MAX_CATEGORY_LENGTH = 100
 MAX_KEY_LENGTH = 40
+MAX_LIMIT_VALUE = 1_000_000_000
 
 
 def _checked_features(value: dict[str, StrictBool] | None) -> dict[str, StrictBool] | None:
@@ -326,7 +347,7 @@ def _checked_features(value: dict[str, StrictBool] | None) -> dict[str, StrictBo
 def _checked_limits(value: dict[str, StrictInt] | None) -> dict[str, StrictInt] | None:
     if value is not None and (
         len(value) > MAX_GROUP_KEYS
-        or any(len(k) > MAX_KEY_LENGTH or v < 0 for k, v in value.items())
+        or any(len(k) > MAX_KEY_LENGTH or not 0 <= v <= MAX_LIMIT_VALUE for k, v in value.items())
     ):
         raise ValueError("некорректные лимиты")
     return value
