@@ -98,6 +98,10 @@ def _mount_resources(app: FastAPI, resources_dir: str | None) -> None:
         directory = Path(resources_dir) / name
         if directory.is_dir():
             app.mount(f"/{name}", StaticFiles(directory=directory), name=f"resources-{name}")
+    # CSS редактора лежит в /editor/ и ссылается на шрифты относительным путём.
+    fonts = Path(resources_dir) / "fonts"
+    if fonts.is_dir():
+        app.mount("/editor/fonts", StaticFiles(directory=fonts), name="resources-editor-fonts")
 
 
 def _mount_static(app: FastAPI, static_dir: str | None) -> None:

@@ -57,5 +57,11 @@ UI Kit.
   `index.html`, `index.html` → `admin.html`; в страницы возвращены `bridge.js` и пустой favicon.
 - Плашка версии v2 (`versionBadge.js`) не подключена: показывала бы номер v2. В `bridge.js`
   `/api/recipients` отвечает 501 (подсказки Exchange появятся с `SenderBackend`), `/api/version` — 404.
+- **2026-11-27:** редактор обновлён до `400aaf4` (2.10.x): выбор нескольких шаблонов и перенос
+  между категориями (`PUT /api/templates/move` в `bridge.js` → `PATCH`), типографика, шрифты
+  баннера и кнопки, артефакты Outlook 2016. Шрифты раздаются и из `/editor/fonts`.
+  Выгрузка `config.ini` (`/api/config/export`) не переносится: видимость категорий в v3
+  задают группы (ADR-0005). Серверные правки v2 для отправки (SendAs без копии в
+  «Отправленных») учесть при переносе `SenderBackend`.
 - Порядок обновления: сравнить `frontend/public/editor` со `static/` v2, скопировать, вернуть
   правки страниц (bridge, favicon), прогнать смоук в браузере.

@@ -203,6 +203,14 @@ function updateButtonAttentionUI(modal, block) {
 /**
  * Рендер canvas с блоками для редактирования
  */
+/**
+ * Состав письма изменился (блок удалён, шаблон загружен и т. п.) — панель рассылки
+ * заново ищет плейсхолдеры и возвращает превью строки на перерисованный холст.
+ */
+function notifyBulkMailCanvasChanged() {
+    if (typeof BulkMailPanel !== 'undefined') BulkMailPanel.schedulePlaceholderRefresh?.();
+}
+
 function renderUserCanvas() {
     const canvas = document.getElementById('user-canvas');
     if (!canvas) return;
@@ -218,6 +226,7 @@ function renderUserCanvas() {
             </div>
         `;
         window.updateUserEditorMeta?.();
+        notifyBulkMailCanvasChanged();
         return;
     }
 
@@ -230,6 +239,7 @@ function renderUserCanvas() {
     initInlineEditing();
     _adjustListMarkerIndents();
     window.updateUserEditorMeta?.();
+    notifyBulkMailCanvasChanged();
 
     // Рендерим canvas-блоки у которых есть элементы но нет PNG
     _renderPendingCanvasBlocks(UserAppState.blocks);
@@ -649,7 +659,8 @@ function renderUserButton(block) {
                 background:${color};
                 color:#ffffff;
                 border-radius:6px;
-                font-weight:600;
+                font-weight:500;
+                font-family:RostelecomBasis-Medium, Arial, sans-serif;
             ">${s.text || 'Кнопка'}</span>
         </div>
     `;
@@ -1051,6 +1062,12 @@ function initInlineEditing() {
             showTextToolbar(e.target);
         });
 
+        // Список плейсхолдеров в панели рассылки следит за текстом на лету:
+        // добавленный появляется (с подсветкой), удалённый исчезает.
+        el.addEventListener('input', () => {
+            if (typeof BulkMailPanel !== 'undefined') BulkMailPanel.schedulePlaceholderRefresh?.();
+        });
+
         // Сохраняем выделение при изменении мышью или клавиатурой
         el.addEventListener('mouseup', () => {
             const sel = window.getSelection();
@@ -1118,6 +1135,7 @@ function initInlineEditing() {
             selection.collapseToEnd();
 
             saveTextChanges(e.target);
+            if (typeof BulkMailPanel !== 'undefined') BulkMailPanel.schedulePlaceholderRefresh?.();
 
             // Читаем правильное поле через dataset
             const blockId = parseInt(e.target.dataset.blockId);
@@ -1565,8 +1583,11 @@ function openListEditor(blockId) {
             if (startGroup) startGroup.style.display = isNumbered ? 'block' : 'none';
             if (formatGroup) formatGroup.style.display = isNumbered ? 'block' : 'none';
             if (iconGroup) iconGroup.style.display = isNumbered ? 'none' : 'block';
-            s.listStyle = isNumbered ? 'numbered' : 'bullets';
-            s.bulletSize = isNumbered ? 40 : 20;
+            const nextStyle = isNumbered ? 'numbered' : 'bullets';
+            if (s.listStyle !== nextStyle) {
+                s.listStyle = nextStyle;
+                s.bulletSize = isNumbered ? 40 : 20;
+            }
         };
     });
 
@@ -1616,8 +1637,13 @@ function openListEditor(blockId) {
         pushUndoState();
         // Собираем данные
         const activeType = modal.querySelector('.toggle-buttons .toggle-btn.active');
+        const prevListStyle = s.listStyle;
         s.listStyle = activeType ? activeType.dataset.value : 'bullets';
-        s.bulletSize = s.listStyle === 'numbered' ? 40 : 20;
+        // Размер буллета меняем только при смене стиля списка — иначе
+        // сбрасывался заданный ранее (меньший) размер.
+        if (s.listStyle !== prevListStyle || !s.bulletSize) {
+            s.bulletSize = s.listStyle === 'numbered' ? 40 : 20;
+        }
         const startRaw = parseInt(document.getElementById('list-start-number').value);
         s.startNumber = isNaN(startRaw) ? 1 : startRaw;
         const activeFormat = document.querySelector('#number-format-group .toggle-btn.active');
