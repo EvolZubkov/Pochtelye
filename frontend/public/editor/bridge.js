@@ -29,6 +29,7 @@
         '/api/bulk',
         '/api/recipients',
         '/api/app-settings',
+        '/api/config/export',
         '/api/user-resources',
         '/api/shared-resources',
         '/api/admin',
@@ -143,6 +144,10 @@
         'PATCH /api/templates/preview': (url, data) => patchTemplate(data.id, { preview: data.preview }),
 
         'PUT /api/templates/rename': (url, data) => patchTemplate(data.id, { name: (data.newName || '').trim() }),
+
+        // Права проверяет сервер v3: чужой или скрытый шаблон перенести нельзя.
+        'PUT /api/templates/move': (url, data) =>
+            patchTemplate(data.id, { category: (data.category || '').trim() }),
 
         'DELETE /api/templates/delete': async (url) => {
             const id = url.searchParams.get('id');

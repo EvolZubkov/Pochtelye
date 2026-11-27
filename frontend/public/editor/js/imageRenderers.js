@@ -1,5 +1,43 @@
 // imageRenderers.js - Рендеринг баннеров и экспертов в canvas
 
+// Шрифты Rostelecom для canvas. Canvas не ждёт @font-face: пока шрифт не загружен,
+// текст рисуется запасным Arial (жирный заголовок баннера «худеет», кнопка меняет
+// гарнитуру). Перед отрисовкой дожидаемся загрузки; без Font Loading API — рисуем сразу.
+const _RT_CANVAS_FONTS = [
+    '300 16px RostelecomBasis-Light',
+    '400 16px RostelecomBasis-Regular',
+    '500 16px RostelecomBasis-Medium',
+    '700 16px RostelecomBasis-Bold'
+];
+const _RT_FONTS_WAIT_MS = 2000;
+let _rtFontsSettled = false;
+let _rtFontsPromise = null;
+
+function _rtFontsSupported() {
+    return typeof document !== 'undefined' && document.fonts
+        && typeof document.fonts.load === 'function';
+}
+
+/**
+ * Вызывает callback, когда шрифты Rostelecom готовы (сразу, если уже готовы
+ * или Font Loading API недоступен). Ожидание ограничено по времени.
+ * @param {Function} callback
+ */
+function whenRtFontsReady(callback) {
+    if (_rtFontsSettled || !_rtFontsSupported()) {
+        callback();
+        return;
+    }
+    if (!_rtFontsPromise) {
+        const loading = Promise.all(
+            _RT_CANVAS_FONTS.map(font => document.fonts.load(font, 'Аа').catch(() => []))
+        );
+        const timeout = new Promise(resolve => setTimeout(resolve, _RT_FONTS_WAIT_MS));
+        _rtFontsPromise = Promise.race([loading, timeout]).then(() => { _rtFontsSettled = true; });
+    }
+    _rtFontsPromise.then(callback);
+}
+
 // Polyfill for CanvasRenderingContext2D.roundRect (Chrome < 99, Firefox < 112, older Electron)
 if (typeof CanvasRenderingContext2D !== 'undefined' &&
     typeof CanvasRenderingContext2D.prototype.roundRect !== 'function') {
@@ -102,6 +140,10 @@ function cancelBannerRender(blockId) {
 }
 
 function renderBannerToDataUrl(block, callback) {
+    if (!_rtFontsSettled && _rtFontsSupported()) {
+        whenRtFontsReady(() => renderBannerToDataUrl(block, callback));
+        return;
+    }
     // Increment generation so any in-flight render for this block is superseded.
     const myGen = (_bannerRenderGen.get(block.id) || 0) + 1;
     _bannerRenderGen.set(block.id, myGen);
@@ -735,7 +777,8 @@ function drawBannerTextElement(ctx, el, iconImg, index = 0, bgColor = '#1D2533')
     const fontSize = (index === 0) ? 28 : 14;
     const fontFamily = getBannerFontFamily(el.fontFamily || 'rt-regular');
     const color = getReadableTextColor(bgColor);
-    const text = el.text || '';
+    // Кавычки в тексте баннера — всегда «ёлочки» (хранимый текст не меняем).
+    const text = Typography.toGuillemets(el.text || '');
     const letterSpacing = el.letterSpacing || 0;
 
     // Настройка шрифта для измерения
@@ -1134,7 +1177,40 @@ function renderExpertToDataUrl(block, callback, forEmail = true) {
     };
 }
 
+/**
+ * Гарантирует, что у блока-кнопки есть растровая картинка (renderedButton).
+ * Без неё в письмо уходит запасной HTML (другой шрифт/вес, Outlook его
+ * искажает), поэтому вызывается при добавлении блока и перед сборкой письма.
+ *
+ * @param {Object} block
+ * @param {number} [columnsCount=1] - число колонок в строке с кнопкой
+ * @returns {Promise<void>}
+ */
+function ensureButtonRendered(block, columnsCount = 1) {
+    return new Promise((resolve) => {
+        const s = block && block.settings;
+        if (!s || block.type !== 'button' || s.renderedButton) {
+            resolve();
+            return;
+        }
+        s._isInColumn = columnsCount > 1;
+        s._columnsCount = columnsCount;
+        renderButtonToDataUrl(block, (result) => {
+            if (result && result.dataUrl) {
+                s.renderedButton = result.dataUrl;
+                s.renderedButtonW = result.width || null;
+                s.renderedButtonH = result.height || null;
+            }
+            resolve();
+        });
+    });
+}
+
 function renderButtonToDataUrl(block, callback) {
+    if (!_rtFontsSettled && _rtFontsSupported()) {
+        whenRtFontsReady(() => renderButtonToDataUrl(block, callback));
+        return;
+    }
     const s = block.settings || {};
     const fullText = s.text || 'Кнопка';
 

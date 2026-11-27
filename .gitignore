@@ -35,3 +35,4 @@ coverage/
 .DS_Store
 Thumbs.db
 *.egg-info/
+.dev/

@@ -82,3 +82,13 @@ def test_resources_are_served_from_site_root(repository, resources):
         assert client.get("/icons/star.png").content == b"png"
         assert client.get("/icons/missing.png").status_code == 404
         assert client.get("/icons/../config.json").status_code in (400, 404)
+
+
+def test_fonts_are_served_next_to_editor_pages(repository, tmp_path):
+    # CSS редактора лежит в /editor/ и ссылается на шрифты относительным путём.
+    (tmp_path / "fonts").mkdir()
+    (tmp_path / "fonts" / "a.woff").write_bytes(b"font")
+    client = _client(repository, tmp_path)
+
+    assert client.get("/fonts/a.woff").content == b"font"
+    assert client.get("/editor/fonts/a.woff").content == b"font"
