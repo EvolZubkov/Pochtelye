@@ -28,6 +28,7 @@
         '/api/send',
         '/api/bulk',
         '/api/recipients',
+        '/api/scheduled',
         '/api/app-settings',
         '/api/config/export',
         '/api/user-resources',
