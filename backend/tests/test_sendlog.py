@@ -1,3 +1,4 @@
+import time
 from datetime import UTC, datetime, timedelta
 
 from app.repository import NewSend, SendFilter, SendStatus
@@ -23,6 +24,7 @@ def _send(repository, sender, recipients, status=SendStatus.SENT, subject="Те�
 def test_record_and_list_sends_newest_first(repository):
     user = repository.ensure_admin("a")
     _send(repository, user, ["x@rt.ru"], subject="первое")
+    time.sleep(0.02)  # часы Windows грубые: без паузы время записей может совпасть
     _send(repository, user, ["y@rt.ru", "z@rt.ru"], subject="второе")
 
     page = repository.list_sends(1, 10, SendFilter())
