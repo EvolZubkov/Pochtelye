@@ -18,8 +18,23 @@ const me = (over: Partial<meApi.Me> = {}): meApi.Me => ({
   ...over,
 });
 
+const signIn = (role: meApi.Me['role'], hash = '') => {
+  vi.spyOn(meApi, 'fetchMe').mockResolvedValue(me({ role }));
+  window.location.hash = hash;
+};
+
+const menuItem = (name: string) => screen.queryByRole('button', { name });
+
+const USER_ITEMS = ['Главная', 'Шаблоны', 'Письма', 'Мои отправки', 'Настройки'];
+const ADMIN_ITEMS = ['Конструктор', 'Все отправки', 'Пользователи', 'Группы', 'Аудитории'];
+
 beforeEach(() => {
   vi.spyOn(templatesApi, 'fetchTemplates').mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(adminApi, 'fetchUsers').mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(adminApi, 'fetchAudiences').mockResolvedValue([]);
+  vi.spyOn(adminApi, 'fetchGroups').mockResolvedValue([]);
+  vi.spyOn(adminApi, 'fetchSendSummary').mockResolvedValue([]);
+  vi.spyOn(adminApi, 'fetchSendLog').mockResolvedValue({ items: [], total: 0 });
 });
 
 afterEach(() => {
@@ -43,13 +58,86 @@ describe('App', () => {
     render(<App />);
 
     expect(await screen.findByText(/Сессия истекла/)).toBeInTheDocument();
+    expect(menuItem('Главная')).not.toBeInTheDocument();
   });
 });
 
-describe('App navigation', () => {
+describe('App sidebar', () => {
+  it('offers admins both user and admin sections', async () => {
+    signIn('admin');
+
+    render(<App />);
+
+    expect(await screen.findByRole('button', { name: 'Пользователи' })).toBeInTheDocument();
+    [...USER_ITEMS, ...ADMIN_ITEMS].forEach((name) => expect(menuItem(name)).toBeInTheDocument());
+  });
+
+  it.each(['editor', 'viewer'] as const)('offers a %s only the user sections', async (role) => {
+    signIn(role);
+
+    render(<App />);
+
+    expect(await screen.findByRole('button', { name: 'Мои отправки' })).toBeInTheDocument();
+    USER_ITEMS.forEach((name) => expect(menuItem(name)).toBeInTheDocument());
+    ADMIN_ITEMS.forEach((name) => expect(menuItem(name)).not.toBeInTheDocument());
+  });
+
+  it('carries the product name in the menu', async () => {
+    signIn('editor');
+
+    render(<App />);
+
+    expect(await screen.findByRole('complementary', { name: 'Разделы' })).toHaveTextContent(
+      'Почтелье',
+    );
+  });
+
+  it('navigates and marks the current section', async () => {
+    signIn('editor');
+
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Шаблоны' }));
+
+    expect(await screen.findByText('Шаблонов пока нет')).toBeInTheDocument();
+    expect(menuItem('Шаблоны')).toHaveAttribute('aria-current', 'page');
+    expect(window.location.hash).toBe('#/templates');
+  });
+
+  it.each([
+    ['#/sends', 'Мои отправки'],
+    ['#/settings', 'Настройки'],
+  ])('says that %s is not built yet', async (hash, title) => {
+    signIn('editor', hash);
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument();
+    expect(screen.getByText('Раздел в разработке')).toBeInTheDocument();
+  });
+
+  it('collapses on the editor and can be expanded again', async () => {
+    signIn('editor', '#/editor');
+
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Развернуть' }));
+
+    expect(screen.getByRole('button', { name: 'Свернуть' })).toBeInTheDocument();
+  });
+
+  it('collapses again when another section is opened', async () => {
+    signIn('editor');
+
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Свернуть' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Шаблоны' }));
+
+    expect(screen.getByRole('button', { name: 'Свернуть' })).toBeInTheDocument();
+  });
+});
+
+describe('App editor', () => {
   it('shows the editor iframe on the editor route', async () => {
-    vi.spyOn(meApi, 'fetchMe').mockResolvedValue(me());
-    window.location.hash = '#/editor';
+    signIn('editor', '#/editor');
 
     render(<App />);
 
@@ -57,15 +145,9 @@ describe('App navigation', () => {
     expect(frame).toHaveAttribute('src', 'editor/index.html');
     expect(screen.queryByText(/Вы вошли как/)).not.toBeInTheDocument();
   });
-});
 
-describe('App builder access', () => {
-  const as = (role: 'admin' | 'editor') =>
-    vi.spyOn(meApi, 'fetchMe').mockResolvedValue(me({ role }));
-
-  it('offers the builder tab and iframe to admins', async () => {
-    as('admin');
-    window.location.hash = '#/builder';
+  it('shows the builder iframe to admins', async () => {
+    signIn('admin', '#/builder');
 
     render(<App />);
 
@@ -73,19 +155,56 @@ describe('App builder access', () => {
       'src',
       'editor/admin.html',
     );
-    expect(screen.getByRole('tab', { name: 'Конструктор' })).toBeInTheDocument();
   });
 
   it('hides the builder from non-admins and falls back to home', async () => {
-    as('editor');
-    window.location.hash = '#/builder';
+    signIn('editor', '#/builder');
 
     render(<App />);
 
     expect(await screen.findByText(/Вы вошли как/)).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Конструктор' })).not.toBeInTheDocument();
     expect(screen.queryByTitle('Конструктор шаблонов')).not.toBeInTheDocument();
   });
+});
+
+describe('App admin sections', () => {
+  it.each([
+    ['#/users', 'Пользователи', 'Пользователей не найдено'],
+    ['#/admin', 'Пользователи', 'Пользователей не найдено'],
+    ['#/audiences', 'Аудитории', 'Аудиторий нет'],
+    ['#/all-sends', 'Все отправки', 'Нет отправок за выбранный период'],
+  ])('opens %s for admins', async (hash, title, content) => {
+    signIn('admin', hash);
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument();
+    expect(await screen.findByText(content)).toBeInTheDocument();
+  });
+
+  it('opens groups for admins', async () => {
+    signIn('admin', '#/groups');
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Группы' })).toBeInTheDocument();
+    await waitFor(() => expect(adminApi.fetchGroups).toHaveBeenCalled());
+  });
+
+  it.each(['#/users', '#/admin', '#/groups', '#/audiences', '#/all-sends'])(
+    'keeps non-admins out of %s',
+    async (hash) => {
+      signIn('editor', hash);
+
+      render(<App />);
+
+      expect(await screen.findByText(/Вы вошли как/)).toBeInTheDocument();
+      expect(adminApi.fetchUsers).not.toHaveBeenCalled();
+      expect(adminApi.fetchGroups).not.toHaveBeenCalled();
+      expect(adminApi.fetchAudiences).not.toHaveBeenCalled();
+      expect(adminApi.fetchSendLog).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('App activation', () => {
@@ -111,40 +230,6 @@ describe('App activation', () => {
 
     expect(await screen.findByText(/Нет токена платформы/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Код приглашения')).not.toBeInTheDocument();
-  });
-});
-
-describe('App admin panel', () => {
-  beforeEach(() => {
-    vi.spyOn(adminApi, 'fetchUsers').mockResolvedValue({ items: [], total: 0 });
-    vi.spyOn(adminApi, 'fetchAudiences').mockResolvedValue([]);
-    vi.spyOn(adminApi, 'fetchSendSummary').mockResolvedValue([]);
-    vi.spyOn(adminApi, 'fetchSendLog').mockResolvedValue({ items: [], total: 0 });
-  });
-
-  it('shows the admin tab to admins and switches between sections', async () => {
-    vi.spyOn(meApi, 'fetchMe').mockResolvedValue(me({ role: 'admin' }));
-    window.location.hash = '#/admin';
-
-    render(<App />);
-
-    expect(await screen.findByText('Пользователей не найдено')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: 'Журнал отправок' }));
-    expect(await screen.findByText('Нет отправок за выбранный период')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: 'Аудитории' }));
-    await waitFor(() => expect(adminApi.fetchAudiences).toHaveBeenCalled());
-    expect(await screen.findByText('Аудиторий нет')).toBeInTheDocument();
-  });
-
-  it('hides the admin tab and panel from non-admins', async () => {
-    vi.spyOn(meApi, 'fetchMe').mockResolvedValue(me({ role: 'editor' }));
-    window.location.hash = '#/admin';
-
-    render(<App />);
-
-    expect(await screen.findByText(/Вы вошли как/)).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Админ' })).not.toBeInTheDocument();
-    expect(adminApi.fetchUsers).not.toHaveBeenCalled();
   });
 });
 

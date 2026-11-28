@@ -1,61 +1,70 @@
 import {
   AppShell,
+  AppShellActions,
   AppShellBrand,
-  AppShellPageHead,
   AppShellUser,
   Banner,
-  Card,
-  CardBody,
+  Sidebar,
   Spinner,
-  Tabs,
 } from '@universityrt/ui-kit';
+import { useState } from 'react';
 import { ApiError } from './api/client';
-import type { Me } from './api/me';
 import { ActivationForm } from './components/ActivationForm';
-import { AdminPanel } from './components/admin/AdminPanel';
-import { EditorFrame } from './components/EditorFrame';
-import { TemplatesList } from './components/TemplatesList';
+import { Workspace } from './components/Workspace';
 import { useReload } from './hooks/useAsync';
 import { useHashRoute } from './hooks/useHashRoute';
 import type { Route } from './hooks/useHashRoute';
 import { useMe } from './hooks/useMe';
 import { errorMessage, t } from './i18n';
+import { isFullWidth, menuFor, visibleRoute } from './navigation';
 
 const NOT_ACTIVATED = 'not_activated';
-const ADMIN_ROUTES: readonly Route[] = ['builder', 'admin'];
-
-const NAV_LABELS: Record<Route, string> = {
-  home: t.nav.home,
-  editor: t.nav.editor,
-  builder: t.nav.builder,
-  admin: t.nav.admin,
-};
-
-/** Конструктор и админ-панель видны администратору; право на них проверяет API. */
-function navFor(role: Me['role']): { id: Route; label: string }[] {
-  const routes: Route[] = role === 'admin' ? ['home', 'editor', 'builder', 'admin'] : ['home', 'editor'];
-  return routes.map((id) => ({ id, label: NAV_LABELS[id] }));
-}
-
-function visibleRoute(route: Route, role: Me['role']): Route {
-  return ADMIN_ROUTES.includes(route) && role !== 'admin' ? 'home' : route;
-}
 
 export function App() {
   const [version, reload] = useReload();
   const state = useMe(version);
   const [route, navigate] = useHashRoute();
+  // Ручной выбор ширины меню действует только в том разделе, где сделан.
+  const [choice, setChoice] = useState<{ route: Route; collapsed: boolean } | null>(null);
   const user = state.status === 'ready' ? state.data : null;
   const needsActivation =
     state.status === 'error' && state.error instanceof ApiError && state.error.code === NOT_ACTIVATED;
 
+  const current = user ? visibleRoute(route, user.role) : route;
+  const collapsed = choice?.route === current ? choice.collapsed : isFullWidth(current);
+
+  const open = (id: string) => {
+    setChoice(null);
+    navigate(id as Route);
+  };
+
   return (
     <AppShell
+      collapsed={user !== null && collapsed}
+      side={
+        user && (
+          <Sidebar
+            aria-label={t.nav.label}
+            brand={<span className="brand-text">{t.appName}</span>}
+            groups={menuFor(user.role)}
+            activeId={current}
+            onSelect={open}
+            collapsed={collapsed}
+            onToggleCollapse={() => setChoice({ route: current, collapsed: !collapsed })}
+          />
+        )
+      }
       header={
         <>
           <AppShellBrand>{t.appName}</AppShellBrand>
           {user && (
-            <AppShellUser name={user.displayName ?? user.email ?? t.home.unnamed} role={t.roles[user.role]} />
+            <AppShellActions>
+              <AppShellUser
+                name={user.displayName ?? user.email ?? t.home.unnamed}
+                role={t.roles[user.role]}
+                interactive={false}
+              />
+            </AppShellActions>
           )}
         </>
       }
@@ -65,49 +74,7 @@ export function App() {
       {state.status === 'error' && !needsActivation && (
         <Banner tone="error" title={errorMessage(state.error)} />
       )}
-      {user && <Workspace user={user} route={visibleRoute(route, user.role)} onNavigate={navigate} />}
+      {user && <Workspace user={user} route={current} />}
     </AppShell>
-  );
-}
-
-interface WorkspaceProps {
-  user: Me;
-  route: Route;
-  onNavigate: (route: Route) => void;
-}
-
-function Workspace({ user, route, onNavigate }: WorkspaceProps) {
-  return (
-    <>
-      <Tabs
-        items={navFor(user.role)}
-        value={route}
-        onChange={onNavigate}
-        hidePanel
-        listAriaLabel={t.nav.label}
-      />
-      {route === 'home' && <Home user={user} />}
-      {(route === 'editor' || route === 'builder') && <EditorFrame mode={route} />}
-      {route === 'admin' && <AdminPanel />}
-    </>
-  );
-}
-
-function Home({ user }: { user: Me }) {
-  return (
-    <>
-      <AppShellPageHead title={t.home.title} />
-      <Card>
-        <CardBody>
-          <p>
-            {t.home.greeting}: {user.displayName ?? user.email ?? user.sub}
-          </p>
-          <p>
-            {t.home.role}: {t.roles[user.role]}
-          </p>
-        </CardBody>
-      </Card>
-      <TemplatesList />
-    </>
   );
 }

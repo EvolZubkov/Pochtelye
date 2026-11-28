@@ -1,14 +1,28 @@
 import { useEffect, useState } from 'react';
 
-export type Route = 'home' | 'editor' | 'builder' | 'admin';
+const ROUTES = [
+  'home',
+  'templates',
+  'editor',
+  'sends',
+  'settings',
+  'builder',
+  'all-sends',
+  'users',
+  'groups',
+  'audiences',
+] as const;
+
+export type Route = (typeof ROUTES)[number];
 
 const ROUTE_PREFIX = '#/';
 const DEFAULT_ROUTE: Route = 'home';
-const ROUTES: readonly Route[] = ['home', 'editor', 'builder', 'admin'];
+/** Старые ссылки: админ-панель раньше была одним разделом. */
+const ALIASES: Record<string, Route> = { admin: 'users' };
 
 export function parseRoute(hash: string): Route {
   const name = hash.startsWith(ROUTE_PREFIX) ? hash.slice(ROUTE_PREFIX.length) : '';
-  return ROUTES.find((route) => route === name) ?? DEFAULT_ROUTE;
+  return ROUTES.find((route) => route === name) ?? ALIASES[name] ?? DEFAULT_ROUTE;
 }
 
 /** Маршрут в hash: работает за любым префиксом платформы и без настройки сервера. */

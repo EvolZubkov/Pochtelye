@@ -12,6 +12,10 @@ describe('parseRoute', () => {
     expect(parseRoute('#/home')).toBe('home');
   });
 
+  it('keeps old admin links working', () => {
+    expect(parseRoute('#/admin')).toBe('users');
+  });
+
   it('falls back to home for unknown or empty hashes', () => {
     expect(parseRoute('')).toBe('home');
     expect(parseRoute('#/nope')).toBe('home');

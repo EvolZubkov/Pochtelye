@@ -1,7 +1,11 @@
+body {
+  margin: 0;
+}
+
 .editor-frame {
   display: block;
   width: 100%;
-  height: calc(100vh - 120px);
+  flex-grow: 1;
   min-height: 480px;
   border: 0;
 }
