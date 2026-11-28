@@ -1,6 +1,7 @@
 import uuid
 
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import defer
 
 from app.repository.base import (
     NewTemplate,
@@ -63,6 +64,7 @@ class TemplatesMixin:
             total = session.scalar(select(func.count()).select_from(TemplateRow).where(*conditions))
             rows = session.scalars(
                 select(TemplateRow)
+                .options(defer(TemplateRow.blocks))  # блоки списку не нужны, а они большие
                 .where(*conditions)
                 .order_by(TemplateRow.name, TemplateRow.id)
                 .offset((page - 1) * limit)

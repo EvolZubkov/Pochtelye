@@ -218,6 +218,24 @@
         }
     }
 
+    // Открытие шаблона по адресу editor/index.html?template=<id>&type=shared|personal.
+    // initUserApp вызывает checkAndRestoreDraft последним шагом запуска: оборачиваем его,
+    // чтобы открыть шаблон, когда редактор уже готов. Восстановленный черновик не затираем.
+    function openRequestedTemplate() {
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('template');
+        const restoreDraft = window.checkAndRestoreDraft;
+        if (!id || typeof restoreDraft !== 'function') return;
+        const type = params.get('type') === 'personal' ? 'personal' : 'shared';
+        window.checkAndRestoreDraft = async function () {
+            await restoreDraft();
+            if (UserAppState.currentScreen !== 'editor') await window.openTemplate(id, type);
+        };
+    }
+
+    // Этот обработчик добавлен раньше, чем в userApp.js, поэтому выполнится до запуска.
+    document.addEventListener('DOMContentLoaded', openRequestedTemplate);
+
     window.fetch = async function (input, init) {
         const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
         const url = new URL(raw, window.location.origin);

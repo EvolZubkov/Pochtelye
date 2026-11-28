@@ -90,18 +90,25 @@ def create_app(
     return app
 
 
+# Откуда редактор берёт картинки и шрифты: корень сайта, ссылки v2 из шаблонов (/cache) и
+# относительные пути со страниц /editor/.
+RESOURCE_PREFIXES = ("", "/cache", "/editor")
+
+
 def _mount_resources(app: FastAPI, resources_dir: str | None) -> None:
     # Картинки редактора раздаются от корня сайта, поэтому монтируются до фронтенда.
     if not resources_dir:
         return
     for name in RESOURCE_DIRS:
         directory = Path(resources_dir) / name
-        if directory.is_dir():
-            app.mount(f"/{name}", StaticFiles(directory=directory), name=f"resources-{name}")
-    # CSS редактора лежит в /editor/ и ссылается на шрифты относительным путём.
-    fonts = Path(resources_dir) / "fonts"
-    if fonts.is_dir():
-        app.mount("/editor/fonts", StaticFiles(directory=fonts), name="resources-editor-fonts")
+        if not directory.is_dir():
+            continue
+        for prefix in RESOURCE_PREFIXES:
+            app.mount(
+                f"{prefix}/{name}",
+                StaticFiles(directory=directory),
+                name=f"resources{prefix}-{name}",
+            )
 
 
 def _mount_static(app: FastAPI, static_dir: str | None) -> None:

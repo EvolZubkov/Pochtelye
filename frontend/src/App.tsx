@@ -23,7 +23,7 @@ const NOT_ACTIVATED = 'not_activated';
 export function App() {
   const [version, reload] = useReload();
   const state = useMe(version);
-  const [route, navigate] = useHashRoute();
+  const [route, navigate, params] = useHashRoute();
   // Ручной выбор ширины меню действует только в том разделе, где сделан.
   const [choice, setChoice] = useState<{ route: Route; collapsed: boolean } | null>(null);
   const user = state.status === 'ready' ? state.data : null;
@@ -74,7 +74,9 @@ export function App() {
       {state.status === 'error' && !needsActivation && (
         <Banner tone="error" title={errorMessage(state.error)} />
       )}
-      {user && <Workspace user={user} route={current} />}
+      {user && (
+        <Workspace user={user} route={current} params={params} onNavigate={navigate} />
+      )}
     </AppShell>
   );
 }

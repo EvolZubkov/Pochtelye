@@ -84,6 +84,12 @@ def test_resources_are_served_from_site_root(repository, resources):
         assert client.get("/icons/../config.json").status_code in (400, 404)
 
 
+@pytest.mark.parametrize("prefix", ["", "/cache", "/editor"])
+def test_images_are_served_for_every_link_style(repository, resources, prefix):
+    with _client(repository, resources) as client:
+        assert client.get(f"{prefix}/icons/star.png").content == b"png"
+
+
 def test_fonts_are_served_next_to_editor_pages(repository, tmp_path):
     # CSS редактора лежит в /editor/ и ссылается на шрифты относительным путём.
     (tmp_path / "fonts").mkdir()

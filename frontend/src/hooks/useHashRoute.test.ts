@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { parseRoute, useHashRoute } from './useHashRoute';
+import { parseParams, parseRoute, useHashRoute } from './useHashRoute';
 
 afterEach(() => {
   window.location.hash = '';
@@ -10,6 +10,12 @@ describe('parseRoute', () => {
   it('maps known hashes to routes', () => {
     expect(parseRoute('#/editor')).toBe('editor');
     expect(parseRoute('#/home')).toBe('home');
+  });
+
+  it('separates the route from its parameters', () => {
+    expect(parseRoute('#/editor?template=1')).toBe('editor');
+    expect(parseParams('#/editor?template=1&type=shared')).toBe('template=1&type=shared');
+    expect(parseParams('#/editor')).toBe('');
   });
 
   it('keeps old admin links working', () => {
@@ -35,5 +41,12 @@ describe('useHashRoute', () => {
 
     expect(window.location.hash).toBe('#/editor');
     expect(result.current[0]).toBe('editor');
+
+    act(() => {
+      result.current[1]('editor', 'template=7');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+
+    expect(result.current[2]).toBe('template=7');
   });
 });

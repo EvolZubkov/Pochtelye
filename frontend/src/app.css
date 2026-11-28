@@ -2,6 +2,18 @@ body {
   margin: 0;
 }
 
+.template-preview {
+  height: 220px;
+  overflow: hidden;
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-page);
+}
+
+.template-preview img {
+  display: block;
+  width: 100%;
+}
+
 .editor-frame {
   display: block;
   width: 100%;

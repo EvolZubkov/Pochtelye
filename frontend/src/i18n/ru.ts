@@ -26,6 +26,9 @@ export const ru = {
     greeting: 'Вы вошли как',
     role: 'Роль',
     unnamed: 'Пользователь без имени',
+    chooseTemplate: 'Выбрать шаблон для письма',
+    newTemplate: 'Создать шаблон',
+    recent: 'Недавно изменённые шаблоны',
   },
   common: {
     loading: 'Загрузка',
@@ -57,6 +60,13 @@ export const ru = {
     emptyTitle: 'Шаблонов пока нет',
     emptyHint: 'Созданные и общие шаблоны появятся здесь.',
     scope: { shared: 'Общий', personal: 'Личный' },
+    open: 'Открыть',
+    searchPlaceholder: 'Название или категория',
+    ownersLabel: 'Чьи шаблоны',
+    owners: { all: 'Все', shared: 'Общие', personal: 'Мои' },
+    allCategories: 'Все категории',
+    uncategorized: 'Без категории',
+    nothingFound: 'Ничего не найдено',
   },
   roles: {
     admin: 'Администратор',
