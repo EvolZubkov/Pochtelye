@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { endOfDayIso, formatDateTime, startOfDayIso, totalPages } from './format';
+import {
+  endOfDayIso,
+  formatDateTime,
+  fromLocalInput,
+  startOfDayIso,
+  toLocalInput,
+  totalPages,
+} from './format';
 
 describe('format', () => {
   it('formats a missing date as "never"', () => {
@@ -26,5 +33,14 @@ describe('format', () => {
   it('never returns fewer than one page', () => {
     expect(totalPages(0, 20)).toBe(1);
     expect(totalPages(41, 20)).toBe(3);
+  });
+});
+
+describe('datetime-local values', () => {
+  it('round-trips a time to the minute', () => {
+    const iso = '2026-12-01T10:30:00.000Z';
+
+    expect(fromLocalInput(toLocalInput(iso))).toBe(iso);
+    expect(fromLocalInput('')).toBe('');
   });
 });

@@ -1,4 +1,3 @@
-import { EmptyState } from '@universityrt/ui-kit';
 import type { ReactNode } from 'react';
 import type { Me } from '../api/me';
 import type { TemplateSummary } from '../api/templates';
@@ -11,6 +10,8 @@ import { UsersPanel } from './admin/UsersPanel';
 import { EditorFrame } from './EditorFrame';
 import { Home } from './Home';
 import { Page } from './Page';
+import { MySends } from './sends/MySends';
+import { Settings } from './Settings';
 import { Templates } from './Templates';
 
 interface WorkspaceProps {
@@ -22,8 +23,6 @@ interface WorkspaceProps {
 
 type PageRoute = Exclude<Route, 'editor' | 'builder'>;
 
-const soon = () => <EmptyState title={t.soon.title} description={t.soon.hint} />;
-
 type PageContext = Pick<WorkspaceProps, 'user' | 'onNavigate'> & {
   onOpen: (template: TemplateSummary) => void;
 };
@@ -31,8 +30,8 @@ type PageContext = Pick<WorkspaceProps, 'user' | 'onNavigate'> & {
 const PAGES: Record<PageRoute, (context: PageContext) => ReactNode> = {
   home: (context) => <Home {...context} />,
   templates: ({ onOpen }) => <Templates onOpen={onOpen} />,
-  sends: soon,
-  settings: soon,
+  sends: ({ user }) => <MySends role={user.role} />,
+  settings: () => <Settings />,
   'all-sends': () => <SendLogPanel />,
   users: () => <UsersPanel />,
   groups: () => <GroupsPanel />,

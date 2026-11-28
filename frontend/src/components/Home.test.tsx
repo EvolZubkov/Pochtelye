@@ -57,6 +57,18 @@ describe('Home', () => {
     expect(onOpen).toHaveBeenCalledWith(template(1));
   });
 
+  it('lists upcoming demo sends and leads to them', async () => {
+    load([]);
+    const { onNavigate } = show();
+
+    expect(await screen.findByText('Приглашение на вебинар')).toBeInTheDocument();
+    expect(screen.queryByText('Отчёт за квартал')).not.toBeInTheDocument();
+    expect(screen.getByText('Тестовые данные')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Все мои отправки' }));
+
+    expect(onNavigate).toHaveBeenCalledWith('sends');
+  });
+
   it('leads to the template list', async () => {
     load([]);
     const { onNavigate } = show();

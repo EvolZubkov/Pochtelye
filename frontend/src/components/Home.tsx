@@ -16,6 +16,7 @@ import { useAsync } from '../hooks/useAsync';
 import type { Route } from '../hooks/useHashRoute';
 import { errorMessage, t } from '../i18n';
 import { TemplateGrid } from './TemplateGrid';
+import { UpcomingSends } from './sends/UpcomingSends';
 
 const RECENT_COUNT = 4;
 
@@ -46,6 +47,7 @@ export function Home({ user, onOpen, onNavigate }: HomeProps) {
           </Cluster>
         </CardBody>
       </Card>
+      <UpcomingSends onShowAll={() => onNavigate('sends')} />
       <Heading level={2}>{t.home.recent}</Heading>
       <RecentTemplates onOpen={onOpen} />
     </Stack>

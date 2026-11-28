@@ -104,15 +104,15 @@ describe('App sidebar', () => {
   });
 
   it.each([
-    ['#/sends', 'Мои отправки'],
-    ['#/settings', 'Настройки'],
-  ])('says that %s is not built yet', async (hash, title) => {
+    ['#/sends', 'Мои отправки', 'Это тестовые данные'],
+    ['#/settings', 'Настройки', 'Это тестовый режим'],
+  ])('opens %s marked as a demo', async (hash, title, mark) => {
     signIn('editor', hash);
 
     render(<App />);
 
-    expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument();
-    expect(screen.getByText('Раздел в разработке')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument();
+    expect(await screen.findByText(mark)).toBeInTheDocument();
   });
 
   it('collapses on the editor and can be expanded again', async () => {

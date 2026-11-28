@@ -21,3 +21,16 @@ export function endOfDayIso(date: string): string | undefined {
 export function totalPages(total: number, pageSize: number): number {
   return Math.max(1, Math.ceil(total / pageSize));
 }
+
+const MINUTE_MS = 60_000;
+
+/** Значение для поля datetime-local: местное время без часового пояса. */
+export function toLocalInput(iso: string): string {
+  const date = new Date(iso);
+  return new Date(date.getTime() - date.getTimezoneOffset() * MINUTE_MS).toISOString().slice(0, 16);
+}
+
+/** Обратно в ISO (UTC). Пустое поле даёт пустую строку: правила отклонят такое время. */
+export function fromLocalInput(value: string): string {
+  return value ? new Date(value).toISOString() : '';
+}
