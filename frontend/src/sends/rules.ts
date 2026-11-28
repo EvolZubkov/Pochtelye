@@ -65,10 +65,11 @@ export function applyEdit(job: SendJob, changes: SendChanges, now: Date): SendJo
   };
 }
 
-export function cancelJob(job: SendJob): SendJob {
+export function cancelJob(job: SendJob, by: string, now: Date): SendJob {
   if (!canCancel(job)) reject('not_editable');
   return {
     ...job,
+    canceled: { by, at: now.toISOString() },
     recipients: job.recipients.map((r) =>
       r.status === 'pending' ? { ...r, status: 'canceled' } : r,
     ),

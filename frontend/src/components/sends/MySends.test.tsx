@@ -1,23 +1,16 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/client';
-import * as editorApi from '../../api/editor';
 import { createDemoSendsApi } from '../../sends/api';
 import { MySends } from './MySends';
 
 const NOW = new Date('2026-12-01T10:00:00Z');
+const ME = 'sender@example.com';
 
-const allowBulk = (value?: boolean) =>
-  vi
-    .spyOn(editorApi, 'fetchFeatures')
-    .mockResolvedValue(value === undefined ? {} : { bulk_mail: value });
-
-async function show(role: 'admin' | 'editor' = 'editor') {
-  const api = createDemoSendsApi(() => NOW);
-  render(<MySends role={role} api={api} />);
+async function show() {
+  render(<MySends actor={ME} api={createDemoSendsApi(() => NOW)} />);
   await screen.findByText('Приглашение на вебинар');
-  return api;
 }
 
 const row = (subject: string) => screen.getByRole('row', { name: new RegExp(subject) });
@@ -25,12 +18,8 @@ const click = (scope: HTMLElement, name: string) =>
   userEvent.click(within(scope).getByRole('button', { name }));
 const openTab = (name: RegExp) => userEvent.click(screen.getByRole('tab', { name }));
 
-afterEach(() => vi.restoreAllMocks());
-
 describe('MySends', () => {
-  it('warns that the data is not real and lists upcoming sends', async () => {
-    allowBulk();
-
+  it('warns that the data is not real and lists upcoming sends and mailings', async () => {
     await show();
 
     expect(screen.getByText('Это тестовые данные')).toBeInTheDocument();
@@ -44,7 +33,6 @@ describe('MySends', () => {
     [/С ошибками/, 'Опрос о столовой'],
     [/Отменённые/, 'Встреча команды'],
   ])('shows its own sends on tab %s', async (tab, subject) => {
-    allowBulk();
     await show();
 
     await openTab(tab);
@@ -53,32 +41,13 @@ describe('MySends', () => {
     expect(screen.queryByText('Приглашение на вебинар')).not.toBeInTheDocument();
   });
 
-  it('hides mass mailings from those without the right', async () => {
-    allowBulk(false);
-
+  it('shows nobody else’s sends', async () => {
     await show();
 
-    expect(screen.queryByText('Новости недели')).not.toBeInTheDocument();
-  });
-
-  it('keeps mass mailings visible to an administrator', async () => {
-    allowBulk(false);
-
-    await show('admin');
-
-    expect(await screen.findByText('Новости недели')).toBeInTheDocument();
-  });
-
-  it('hides mass mailings when the rights cannot be loaded', async () => {
-    vi.spyOn(editorApi, 'fetchFeatures').mockRejectedValue(new ApiError('network_error', 'x', 0));
-
-    await show();
-
-    expect(screen.queryByText('Новости недели')).not.toBeInTheDocument();
+    expect(screen.queryByText('Анонс обучения')).not.toBeInTheDocument();
   });
 
   it('shows every recipient with the error text', async () => {
-    allowBulk();
     await show();
     await openTab(/С ошибками/);
 
@@ -89,7 +58,6 @@ describe('MySends', () => {
   });
 
   it('edits the subject of a scheduled send', async () => {
-    allowBulk();
     await show();
 
     await click(row('Приглашение на вебинар'), 'Изменить');
@@ -103,7 +71,6 @@ describe('MySends', () => {
   });
 
   it('keeps the form open and explains a rejected change', async () => {
-    allowBulk();
     await show();
 
     await click(row('Приглашение на вебинар'), 'Изменить');
@@ -115,7 +82,6 @@ describe('MySends', () => {
   });
 
   it('locks subject and time once sending has started', async () => {
-    allowBulk();
     await show();
 
     await click(row('Новости недели'), 'Изменить');
@@ -126,7 +92,6 @@ describe('MySends', () => {
   });
 
   it('cancels a scheduled send after confirmation', async () => {
-    allowBulk();
     await show();
 
     await click(row('Приглашение на вебинар'), 'Отменить');
@@ -140,7 +105,6 @@ describe('MySends', () => {
   });
 
   it('retries a failed send', async () => {
-    allowBulk();
     await show();
     await openTab(/С ошибками/);
 
@@ -149,5 +113,14 @@ describe('MySends', () => {
     expect(await screen.findByText('Здесь пока пусто')).toBeInTheDocument();
     await openTab(/Запланированные/);
     expect(row('Опрос о столовой')).toBeInTheDocument();
+  });
+
+  it('explains a loading failure', async () => {
+    const api = createDemoSendsApi(() => NOW);
+    api.list = () => Promise.reject(new ApiError('network_error', 'x', 0));
+
+    render(<MySends actor={ME} api={api} />);
+
+    expect(await screen.findByText('Нет связи с сервером.')).toBeInTheDocument();
   });
 });

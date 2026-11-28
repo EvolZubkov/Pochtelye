@@ -19,6 +19,7 @@ const job = (...statuses: RecipientStatus[]): SendJob => ({
   id: '1',
   kind: 'bulk',
   subject: 'Тема',
+  author: 'me@rt.ru',
   from: 'me@rt.ru',
   sendAt: LATER,
   recipients: statuses.map((status, i) => ({ email: `r${i}@rt.ru`, status })),
@@ -113,13 +114,14 @@ describe('applyEdit', () => {
 
 describe('cancelJob and retryJob', () => {
   it('cancels only what has not started', () => {
-    const canceled = cancelJob(job('sent', 'sending', 'pending'));
+    const canceled = cancelJob(job('sent', 'sending', 'pending'), 'boss@rt.ru', NOW);
 
     expect(canceled.recipients.map((r) => r.status)).toEqual(['sent', 'sending', 'canceled']);
+    expect(canceled.canceled).toEqual({ by: 'boss@rt.ru', at: NOW.toISOString() });
   });
 
   it('refuses to cancel a finished send', () => {
-    expect(() => cancelJob(job('sent'))).toThrow(
+    expect(() => cancelJob(job('sent'), 'boss@rt.ru', NOW)).toThrow(
       expect.objectContaining({ code: 'not_editable' }),
     );
   });

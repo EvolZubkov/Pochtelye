@@ -5,11 +5,11 @@ import type { Route } from '../hooks/useHashRoute';
 import { t } from '../i18n';
 import { AudiencesPanel } from './admin/AudiencesPanel';
 import { GroupsPanel } from './admin/GroupsPanel';
-import { SendLogPanel } from './admin/SendLogPanel';
 import { UsersPanel } from './admin/UsersPanel';
 import { EditorFrame } from './EditorFrame';
 import { Home } from './Home';
 import { Page } from './Page';
+import { AllSends } from './sends/AllSends';
 import { MySends } from './sends/MySends';
 import { Settings } from './Settings';
 import { Templates } from './Templates';
@@ -27,12 +27,14 @@ type PageContext = Pick<WorkspaceProps, 'user' | 'onNavigate'> & {
   onOpen: (template: TemplateSummary) => void;
 };
 
+const actorName = (user: Me) => user.email ?? user.displayName ?? user.id;
+
 const PAGES: Record<PageRoute, (context: PageContext) => ReactNode> = {
   home: (context) => <Home {...context} />,
   templates: ({ onOpen }) => <Templates onOpen={onOpen} />,
-  sends: ({ user }) => <MySends role={user.role} />,
+  sends: ({ user }) => <MySends actor={actorName(user)} />,
   settings: () => <Settings />,
-  'all-sends': () => <SendLogPanel />,
+  'all-sends': ({ user }) => <AllSends actor={actorName(user)} />,
   users: () => <UsersPanel />,
   groups: () => <GroupsPanel />,
   audiences: () => <AudiencesPanel />,

@@ -13,10 +13,15 @@ export interface SendJob {
   id: string;
   kind: SendKind;
   subject: string;
+  /** Кто создал отправку. */
+  author: string;
+  /** Ящик отправителя. */
   from: string;
   /** ISO-время начала отправки. */
   sendAt: string;
   recipients: Recipient[];
+  /** Кто и когда отменил оставшуюся часть отправки. */
+  canceled?: { by: string; at: string };
 }
 
 export interface SendChanges {

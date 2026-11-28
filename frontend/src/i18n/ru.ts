@@ -23,8 +23,12 @@ export const ru = {
     tabsLabel: 'Состояние отправок',
     tabs: { queue: 'Запланированные', sent: 'Отправленные', failed: 'С ошибками', canceled: 'Отменённые' },
     empty: 'Здесь пока пусто',
+    logTab: 'Журнал отправок',
+    filter: { author: 'Автор', from: 'С даты', to: 'По дату', query: 'Тема или получатель' },
     columns: {
       subject: 'Тема',
+      author: 'Автор',
+      canceled: 'Кто отменил',
       kind: 'Тип',
       sendAt: 'Когда',
       progress: 'Отправлено',
